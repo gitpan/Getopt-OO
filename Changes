@@ -44,5 +44,13 @@ Revision history for Perl extension Getopt::OO.
       old ones.
     - Print line numbers for test when test is run as
       perl -Ilib t/Getopt-OO.t
+0.05 Sun Jan 30 19:48:00 PST 2005
+    - Fixed a problem with indent.
+    - Fixed a problem with Getopt and mulit-value.
+    - Added ability of other_values to use callback and ClientData.
+    - Added several tests.
+    - Modified error message for callback so that name of option 
+      generating error is displayed.
+    - This should be it for feature modifications.
 
 

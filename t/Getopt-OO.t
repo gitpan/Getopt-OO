@@ -1,4 +1,13 @@
 # $Log: Getopt-OO.t,v $
+# Revision 1.10  2005/01/31 04:05:50  sjs
+# Fixed a warning on $m8 variable.
+#
+# Revision 1.9  2005/01/31 04:03:06  sjs
+# Added and updated tests.
+#
+# Revision 1.8  2005/01/28 07:47:40  sjs
+# modified other_values behaviour
+#
 # Revision 1.7  2005/01/23 22:18:34  sjs
 # Fixed test 51.
 #
@@ -43,7 +52,7 @@ BEGIN{
 	#########################
 
 {
-my $help = 'USAGE: Getopt-OO.t  [-ab ]
+my $help = 'USAGE: Getopt-OO.t [-ab ]
     -a  help for a
     -b  help for b
 ';
@@ -75,7 +84,7 @@ my $help = 'USAGE: Getopt-OO.t  [-ab ]
 }
 # Check for multiple declaration.
 {
-my $error = 'USAGE: Getopt-OO.t  [-a ]
+my $error = 'USAGE: Getopt-OO.t [-a ]
     -a  help for a
 Found following errors:
 Options "-a" declared more than once.
@@ -197,9 +206,9 @@ Options "-a" declared more than once.
 }
 # Test callback.
 {
-my $error = 'USAGE: Getopt-OO.t  [-a ]
+my $error = 'USAGE: Getopt-OO.t [-a ]
 Found following errors:
-Callback returned an error:
+Option callback for "-a" returned an error:
 	callback with an error
 ';
 	my $x;
@@ -336,19 +345,177 @@ Callback returned an error:
 		);
 	}
 }
+# tests for other_values.
+{
+	my $m1 = "USAGE: Getopt-OO.t value_1 ... value_n
+Found following errors:
+other_values: Can't have n_values and multi_value
+";
+	eval {
+		my $handle = Getopt::OO->new(
+			[],
+			other_values => { n_values => 1, multi_value => 1, },
+		);
+	};
+	OK(
+		$@ eq $m1,
+		"other_value check for multi_value and n_value both set.\n$@"
+	);
+	my $m2 = 'USAGE: Getopt-OO.t
+Found following errors:
+other_values: bad tags: x_values
+';
+	eval {
+		my $handle = Getopt::OO->new(
+			[],
+			other_values => { x_values => 1},
+		);
+	};
+	OK(
+		$@ eq $m2,
+		"Check for bad tag name\n$@"
+	);
+	my $m3 = 'USAGE: Getopt-OO.t
+Found following errors:
+other_values: n_values must be a number.
+';
+	eval {
+		my $handle = Getopt::OO->new(
+			[],
+			other_values => { n_values => 'x'},
+		);
+	};
+	OK(
+		$@ eq $m3,
+		"Check for bad n_values\n$@"
+	);
+	my $m4 = 'USAGE: Getopt-OO.t
+Found following errors:
+other_values: should be reference to a hash.
+';
+	eval {
+		my $handle = Getopt::OO->new(
+			[],
+			other_values => 'x',
+		);
+	};
+	OK(
+		$@ eq $m4,
+		"Check for bad other_values tag\n$@"
+	);
+	my $m5 = 'USAGE: Getopt-OO.t value
+';
+	my $handle;
+	eval {
+		$handle = Getopt::OO->new(
+			[ 'x', ],
+			other_values => { n_values => 1},
+		);
+	};
+	OK(
+		!$@ && $handle && $handle->Help() eq $m5,
+		"Check help other_value for n_value == 1\n$@:"
+			. (($handle) ? $handle->Help() : ''),
+	);
+	my $m6 = 'USAGE: Getopt-OO.t value_1 value_2
+';
+	eval {
+		$handle = Getopt::OO->new(
+			[ 'x', 'y' ],
+			other_values => { n_values => 2},
+		);
+	};
+	OK(
+		!$@ && $handle && $handle->Help() eq $m6,
+		"Check help for other_value n_value == 2\n$@:"
+			. (($handle) ? $handle->Help() : ''),
+	);
+	my $m7 = 'USAGE: Getopt-OO.t value_1 ... value_3
+';
+	my @r1;
+	eval {
+		$handle = Getopt::OO->new(
+			[ 'x', 'y', 'z' ],
+			other_values => {
+				n_values => 3,
+				callback=> sub {
+					@r1 = $_[0]->Values($_[1]); 0
+				},
+			},
+		);
+	};
+	OK(
+		!$@ && $handle && $handle->Help() eq $m7,
+		"Check help for other_value n_value == 2\n$@:"
+			. (($handle) ? $handle->Help() : ''),
+	);
+	OK(
+		scalar $handle->Values('other_values') == 3 &&
+		join(' ', $handle->Values('other_values')) eq 'x y z',
+		'Check return on other_values'
+	);
+	OK(
+		@r1 == 3 && join(' ', @r1) eq 'x y z',
+		'Check return on other_values callback'
+	);
+	my $m8 = 'USAGE: Getopt-OO.t value_1 ... value_n
+';
+	eval {
+		$handle = Getopt::OO->new(
+			[ 'x', 'y', 'z' ],
+			other_values => { multi_value => 1 },
+		);
+	};
+	OK(
+		!$@ && $handle && $handle->Help() eq $m8,
+		"Check help for other_value multi_value\n$@:"
+			. (($handle) ? $handle->Help() : ''),
+	);
+	my $m9 = 'USAGE: Getopt-OO.t file_1 ... file_n
+';
+	eval {
+		$handle = Getopt::OO->new(
+			[ 'x', 'y', 'z' ],
+			other_values => { help => 'file_1 ... file_n' },
+		);
+	};
+	OK(
+		!$@ && $handle && $handle->Help() eq $m9,
+		"Check help for other_value help\n$@:"
+			. (($handle) ? $handle->Help() : ''),
+	);
+	$m8 = 'USAGE: Getopt-OO.t value_1 ... value_3
+Found following errors:
+other_values callback returned an error:
+	Fail callback
+';
+	eval {
+		$handle = Getopt::OO->new(
+			[ 'x', 'y', 'z' ],
+			other_values => {
+				n_values => 3,
+				callback=> sub {'Fail callback'},
+			},
+		);
+	};
+	OK(
+		$@ && $@ eq $m8,
+		'Check fail on other_value callback.',
+	);
+}
 # Complicated -- check everything.
 {
-	my $help = 'USAGE: Getopt-OO.t  [-bc b_arg c_arg] [--b b_arg --c ... - --d ... -] -a  --a arg
+	my $help = 'USAGE: Getopt-OO.t [-bc b_arg c_arg] [--b b_arg --c ... - --d ... -] -a  --a value
     Arguments --a, -a are required.
     Arguments "-a -b" are mutually exclusive.
     Argument -c may occur more than once.
-    --a     help for --a
-    --b arg help for --b
-    --c ... -help for --c
-    --d ... -help for --d
-    -a      help for -a
-    -b arg  help for -b
-    -c arg  help for -c
+    --a         help for --a
+    --b arg     help for --b
+    --c ... -   help for --c
+    --d ... -   help for --d
+    -a          help for -a
+    -b arg      help for -b
+    -c arg      help for -c
 ';
 	my $h;
 	my @argv = qw(-a --a --c 1 2 3 - abc);
@@ -357,7 +524,7 @@ Callback returned an error:
 			\@argv,
 			'required'			=> [ '-a', '--a', ],
 			'mutual_exclusive'	=> [ [ '-a', '-b', ], ],
-			'other_values'		=> 1,
+			'other_values'		=> { n_values => 1},
 			'-a' => {'help'		=> 'help for -a'},
 			'-b' => {
 				'help'			=> 'help for -b',
@@ -406,14 +573,14 @@ Callback returned an error:
 		OK(@argv == 1 && $argv[0] eq 'abc', "other_values is broken.");
 	}
 }
-# Check other_values to make sure it's right and wrong.
+# Check other_values to make sure it is right and wrong.
 {
 	my $h;
 	eval {
 		$h = Getopt::OO->new(
 			[qw(-a abc)],
 			'-a' => { 'n_values' => 1, },
-			'other_values' => 1,
+			'other_values' => { n_values => 1},
 		);
 	};
 	OK(
@@ -425,8 +592,9 @@ Callback returned an error:
 		$h = Getopt::OO->new(
 			\@argv,
 			'-a' => { 'n_values' => 1, },
-			'other_values' => 1,
+			'other_values' => { n_values => 1},
 		);
 	};
 	OK(@argv == 1 && $argv[0] eq 'def', "argv not right.");
 }
+# Tests for other_values.

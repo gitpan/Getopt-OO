@@ -1,5 +1,26 @@
 #!/usr/local/bin/perl -w
 # $Log: OO.pm,v $
+# Revision 1.11  2005/01/31 04:02:43  sjs
+#     - Fixed a problem with indent.
+#     - Fixed a problem with Getopt and mulit-value.
+#     - Added ability of other_values to use callback and ClientData.
+#     - Added several tests.
+#     - Modified error message for callback so that name of option
+#       generating error is displayed.
+#     - This should be it for feature modifications.
+#
+# Revision 1.10  2005/01/28 07:47:40  sjs
+# modified other_values behaviour
+#
+# Revision 1.9  2005/01/27 15:38:02  sjs
+# Change the way indent works on help.  We now make string one char
+# longer than option so help will be a little narrower rather than
+# using a tab stop of 4.
+#
+# Revision 1.8  2005/01/27 15:35:34  sjs
+# Change version to 0.05.
+# Fix problem with indent.
+#
 # Revision 1.7  2005/01/23 21:38:45  sjs
 # Fixed some problems with the pod and pod2man on older versions.
 #
@@ -64,8 +85,8 @@ require Exporter;
 
 @EXPORT_OK = qw(Debug Verbose);
 
-$VERSION = '0.04';
-$Revision = '$Id: OO.pm,v 1.7 2005/01/23 21:38:45 sjs Exp $';
+$VERSION = '0.05';
+$Revision = '$Id: OO.pm,v 1.11 2005/01/31 04:02:43 sjs Exp $';
 
 =head1 NAME
 
@@ -97,10 +118,12 @@ help for options to simplify generation of usage statements.
             "Everything between '--multiple_values' and '-' is",
             "an value for this options",
         ],
-        'multi_values' => 1,
+        'multi_value' => 1,
         'multiple= => 1, # Can happen more than once on command line.
     },
-    other_values => 2,
+    other_values => {
+		help => 'file_1 ... file_n',
+		multi_value => 1,
  );
   if ($handle->Values()) {
     Debug("You will get output if -d was on command line");
@@ -224,7 +247,6 @@ is the base name of the executable ($0) and just the string
 
 =head2 other_values
 
-
 Usually all the argments on a command line aren't associated
 with options.  For instance, a function may always require
 a file name but have several other options too.  It's
@@ -232,9 +254,37 @@ signature might look like
 
  script [-v] input_file
 
-To insure that you have the correct number of arguments after
-parsing the options, set 'other_values => n' where n is the number
-of additional arguments expected.  This is an optional argument.
+other_values allows you to supply help for the usage message
+and tell the parser how many args to expect.  Use might look like
+
+ other_values => {
+        help => 'file_1 ... file_n',
+        multi_value => 1,
+ },
+
+For the call to script above, the first output line of
+the usage statement would look like:
+
+ script [-v] file_1 ... file_n
+
+and since multi_value is set, an error would occur unless at
+least one value were passed in.
+
+Use multi_value or n_values to tell the parser how many values
+to expect.  Both of these values are optional and if not supplied,
+the parser doesn't check for values after the parsing is done.
+
+help is also optional.  If it is not supplied, we use n_values
+or multi_value to print a message that makes sense.  Note that
+if n_values or multi_value are set, it is an error to not have
+other values after the options are parsed, but you can just
+supply the help value and no other checking of the other_values
+will occur.
+
+As discussed below, other_values will also accept a callback and 
+use ClientData and return its values using 
+$handle->Values('other_values'). Unlike the other options, 
+other_values can not be 'multiple'. 
 
 
 =head2 required
@@ -519,10 +569,30 @@ sub build_help {
 		$template,
 		grep(/^--/ && $required{$_}, keys %$template),
 	);
-	my $other_values = ($template->{'other_values'})
-		? ' arg' x $template->{'other_values'}
-		: '';
-	my $usage = join ('', "USAGE: $name ",
+	my $other_values = do {
+		my $rv = '';
+		if ($template->{'other_values'}) {
+			my $ref = $template->{'other_values'};
+			if (ref $ref && ref $ref eq 'HASH') {
+				$rv = ($ref->{help})
+					? " $ref->{help}"
+					: ($ref->{multi_value})
+						? ' value_1 ... value_n'
+						: ($ref->{n_values})
+							? ($ref->{n_values} !~ /^\d+$/)
+								? ''
+								: ($ref->{n_values} == 1)
+									? ' value'
+									: ($ref->{n_values} == 2) 
+										? ' value_1 value_2'
+										: " value_1 ... value_"
+												. $ref->{n_values}
+							: '';
+			}
+		}
+		$rv;
+	};
+	my $usage = join ('', "USAGE: $name",
 		($short_optional_arg_list)	? " [$short_optional_arg_list]" : '',
 		($long_optional_arg_list)	? " [$long_optional_arg_list]" : '',
 		($short_required_arg_list)	? " $short_required_arg_list" : '',
@@ -575,13 +645,13 @@ sub build_help {
 		if ($template->{$_}{'n_values'}) {
 			foreach my $i (1..$template->{$_}{'n_values'}) {
 				$options .= ($i > 1) ? " arg_$i" : ' arg';
-				$max_len = length $options if (length $options > $max_len);
 			}
 		}
 		elsif ($template->{$_}{'multi_value'}) {
 			$options .= ' ... -';
 		}
 		$options_list{$_} = $options;
+		$max_len = length $options if (length $options > $max_len);
 	} sort grep ref $template->{$_} eq 'HASH'
 			&& /^-+/
 			&& exists $template->{$_}{'help'}
@@ -616,16 +686,35 @@ sub parse_template {
 	my @errors;
 	my %defined;
 	# First do the non-dashed options.
-	my %valid = map {$_,1} qw(multiple other_values usage multi_value);
+	my %valid = map {$_,1} qw(
+		multiple other_values usage multi_value
+	);
 	if (my @bad = grep !/^-/ && !$valid{$_}, keys %$template) {
 		if (my @bad) {
 			push @errors, "Unrecognized tags: @bad\n";
 		}
 	}
-	if (defined $template->{'other_values'}
-				&& $template->{'other_values'} !~ /^\d+/) {
-		push @errors, "other_values is \""
-			. $template->{'other_values'} . "\" and must be a number.\n";
+	if (defined $template->{'other_values'}) {
+		my $ref = $template->{'other_values'};
+		if (ref $ref && ref $ref eq 'HASH') {
+			# These are valid tags for the other_values key.
+			my %valid_tags = map {
+				$_, 1
+			} qw(multi_value n_values help callback);
+			if (my @bad = grep !$valid_tags{$_}, keys %$ref) {
+				push @errors, "other_values: bad tags: @bad\n";
+			}
+			elsif ($ref->{multi_value} && $ref->{n_values}) {
+				push @errors,
+					"other_values: Can't have n_values and multi_value\n";
+			}
+			elsif ($ref->{n_values} && $ref->{n_values} !~ /^\d+/) {
+				push @errors, "other_values: n_values must be a number.\n";
+			}
+		}
+		else {
+			push @errors, "other_values: should be reference to a hash.\n";
+		}
 	}
 
 	foreach my $option (sort grep !/^-+/,  keys %$template) {
@@ -777,8 +866,8 @@ sub parse_options {
 				}
 				if (!@errors && $ref->{callback}) {
 					if (my $error = &{$ref->{callback}}($this, $option)) {
-						push @errors, "Callback returned an error:\n\t"
-							. "$error\n";
+						push @errors, "Option callback for \"$option\" "
+							. "returned an error:\n\t$error\n";
 					}
 				}
 			}
@@ -789,9 +878,36 @@ sub parse_options {
 		}
 		last if @errors;
 	}
-	if ($template->{'other_values'} && $template->{'other_values'} != @$argv) {
-		push @errors, "Expected $template->{other_values} after parsing "
-			. "options and had ", scalar @$argv, "\n";
+	if ($template->{'other_values'} && !@errors) {
+		my $ref = $template->{'other_values'};
+		if ($ref->{multi_value}) {
+			if (@$argv) {
+				# Make a local copy of argv.
+				$this->{other_values}{values} = [@$argv];
+			}
+			else {
+				push @errors,
+					"Expected at least one additonal value after "
+					. "parsing options";
+			}
+		}
+		elsif ($ref->{n_values}) {
+			# Make a local copy of argv.
+			if (@$argv == $ref->{n_values}) {
+				$this->{other_values}{values} = [@$argv];
+			}
+			else {
+				push @errors, "Expected $ref->{n_values} and got "
+					. scalar @$argv . " values after parsing";
+			}
+		}
+		# If we have an other_values callback, do it.
+		if (!@errors && $ref->{callback}) {
+			if (my $error = &{$ref->{callback}}($this, 'other_values')) {
+				push @errors, "other_values callback returned an error:\n\t"
+					. "$error\n";
+			}
+		}
 	}
 }
 
@@ -907,17 +1023,21 @@ sub Values {
 	if ($key) {
 		if (exists $this->{$key}) {
 			my $ref = $this->{$key};
-			($ref->{'multi_value'})
-				? ($ref->{'values'})
+			($key eq 'other_values') 
+				? ($ref->{values})
 					? return @{$ref->{'values'}}
 					: return
-				: ($ref->{'n_values'})
-					? ($ref->{'multiple'})
-						? return(@{$ref->{'values'}})
-						: ($ref->{'n_values'} == 1)
-							? return($ref->{'values'})
-							: return(@{$ref->{'values'}})
-					: return($ref->{'values'} || 0)
+				: ($ref->{'multi_value'})
+					? ($ref->{'values'})
+						? return @{$ref->{'values'}}
+						: return
+					: ($ref->{'n_values'})
+						? ($ref->{'multiple'})
+							? return(@{$ref->{'values'}})
+							: ($ref->{'n_values'} == 1)
+								? return($ref->{'values'})
+								: return(@{$ref->{'values'}})
+						: return($ref->{'values'} || 0)
 		}
 		else {
 			die "Values called on undefined option.\n";

@@ -1,6 +1,6 @@
 Getopt-OO version 0.04
 ======================
-$Id: README,v 1.3 2005/01/23 20:41:23 sjs Exp $
+$Id: README,v 1.4 2005/01/31 04:01:47 sjs Exp $
 
 Getopt::OO - Perl object oriented version of command line parser 
 that uses a perl hash as template to describe command line 
@@ -14,6 +14,8 @@ all the command line parsing can be done by the parser.  When the
 parser has completed its task, the various options and values 
 from the command line are easily accessable to the programmer, 
 and he knows the command line arguments were valid. 
+
+As of version 0.05, I think we have all features.
 
 INSTALLATION
 
