@@ -1,6 +1,25 @@
 Revision history for Perl extension Getopt::OO.
 
 0.01  Wed Dec 29 14:07:26 2004
-	- original version; created by h2xs 1.23 with options
-		-XA -n Getopt::OO
-
+    - original version; created by h2xs 1.23 with options
+        -XA -n Getopt::OO
+0.02  Sun Jan 16, 2005
+    - Cleaned up documentation.
+    - Added test cases and fixed one bad test case.
+    - Fixed problems in required and mutual_exclusive options.
+    - Modified mutual_exclusive so it will accept either a 
+      list of lists or a list as necessary.
+    - Tested with Cygwin under Windows with PERL 5.8 and 
+      under SuSE linux with PERL 5.8.5 and 5.5.4.
+    - Got rid of 'our' keyword so we would work with perl 5.5.
+    - Modified the test case to not use Test::More which isn't
+      available on the older releases.
+0.03  Monday Jan 17, 2005
+    - Added additional error checking so we would catch 
+      invalid multi-character short options.
+    - Added an other_args option to fill out the usage statement.
+    - Modified usage message so we print the required options.
+    - Updated the README and Changes files which were missed
+      in 0.02.
+    - Made changes so we should work under PERL 5.004 but this
+      has not yet been tested.

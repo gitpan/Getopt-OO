@@ -1,4 +1,8 @@
 # $Log: Getopt-OO.t,v $
+# Revision 1.5  2005/01/18 03:44:32  sjs
+# Fixed to handle changes to usage statement.
+# Added test to catch bogus short args.
+#
 # Revision 1.4  2005/01/17 06:55:13  sjs
 #
 # Makefile: move required version to 5.005.
@@ -28,7 +32,7 @@ $| = 1;
 #If we can''t find our lib or are somehow wrong version, abort!
 my $TestVersion;
 BEGIN{
-	$TestVersion = '0.02';
+	$TestVersion = '0.03';
 	eval {
 		require 'Getopt/OO.pm';
 		$Getopt::OO::VERSION eq $TestVersion
@@ -60,7 +64,7 @@ BEGIN{
 	#########################
 
 {
-my $help = 'USAGE: Getopt-OO.t [ -ab   ]  
+my $help = 'USAGE: Getopt-OO.t [ -ab  ] 
     -a  help for a
     -b  help for b
 ';
@@ -78,20 +82,19 @@ my $help = 'USAGE: Getopt-OO.t [ -ab   ]
 }
 {
 	# Make sure die works right.
-my $error = 'USAGE: Getopt-OO.t [ -a   ]  
+my $error = 'USAGE: Getopt-OO.t [ -a  ] 
     -a  help for a
 Found following errors:
 Options "-a" declared more than once.
 ';
-	my @e = ( "Options \"-a\" declared more than once.\n");
-	my ($h, @errors);
-	eval {
-		($h, @errors) = Getopt::OO->new(
+	my $h = eval {
+		Getopt::OO->new(
 			[ '-a' ],
 			'-a' => {help => 'help for a'},
 			'-a' => {help => 'help for a'},
 		);
 	};
+	my $e = $@;
 	OK($@ eq $error, "option declared more than once");
 }
 # Check return values and types are right.
@@ -168,12 +171,12 @@ Options "-a" declared more than once.
 	my $x;
 	my $h = Getopt::OO->new(
 		[ '-a' ],
-		-a => { callback => sub{$x = 27; 0 }, }
+		'-a' => { callback => sub{$x = 27; 0 }, }
 	);
 	OK($x == 27, 		"callback with no error works.");
 }
 {
-my $error = 'USAGE: Getopt-OO.t [ -a   ]  
+my $error = 'USAGE: Getopt-OO.t [ -a  ] 
 Found following errors:
 Callback returned an error:
 	callback with an error
@@ -268,6 +271,31 @@ Callback returned an error:
 		);
 	};
 	OK($@ =~ /Found mutually exclusive/,"bad mutual_exclusive ok.\n");
+}
+# Check to make sure we catch bad argument.
+{
+	my $h = eval {
+		Getopt::OO->new (
+			[ qw (-a -b -c) ],
+			'-av' => {}
+		)
+	};
+
+	OK($@, 'xxx');
+}
+# Make sure the other_args statement works right.
+{
+	my $other_arg = 'file0, file5, file99';
+	my $h = eval {
+		Getopt::OO->new (
+			[ qw (-a) ],
+			'other_args' => $other_arg,
+			'-a' => {}
+		)
+	};
+
+	my $hh = $h->Help();
+	OK ($hh =~ /$other_arg\n/, "other_args");
 }
 
 __END__

@@ -1,4 +1,11 @@
 # $Log: OO.pm,v $
+# Revision 1.4  2005/01/18 03:44:02  sjs
+# Added new other_args option.
+# Added additional error checking.
+# Added changes to support PERL 5.004.
+# Modified USAGE message to also show mutual_exclusive options.
+# Modified USAGE to separate long and short optional options.
+#
 # Revision 1.3  2005/01/17 06:54:57  sjs
 #
 # Makefile: move required version to 5.005.
@@ -24,7 +31,7 @@ use strict;
 # Use warnings if possible.  Don't worry if you can't.  Package was developed
 # with warnings on, but it wasn't around by default before 5.6.
 eval { require 'warnings.pm' };
-use vars qw($VERSION @ISA @EXPORT_OK);
+use vars qw($VERSION @ISA @EXPORT_OK $Revision);
 
 require Exporter;
 
@@ -32,7 +39,8 @@ require Exporter;
 
 @EXPORT_OK = qw(Debug Verbose);
 
-$VERSION = '0.02';
+$VERSION = '0.03';
+$Revision = '$Id: OO.pm,v 1.4 2005/01/18 03:44:02 sjs Exp $';
 
 =head1 NAME
 
@@ -156,8 +164,8 @@ execute 'die $string' where $string is the returned value.
 
 =head2 Template non-dashed arguments
 
-Only four  non-dashed  keys are allowed: 'required' and 'usage'
-and 'mutual_exclusive'.
+Only four  non-dashed  keys are allowed: 'usage', 'other_args',
+'required', and 'mutual_exclusive'.
 
 =head3 usage
 
@@ -167,6 +175,18 @@ the various dashed arguments in the template, creates the complete
 usage message.  By default, we will create a usage string that
 is the base name of the executable ($0) and just the string
 '[options]'.
+
+=head3 other_args
+
+Usually all the argments on a command line aren't associated
+with options.  For instance, a function may always require
+a file name but have several other options too.  It's
+signature might look like 
+
+ script [-v] input_file
+
+To add this to the first line of the usage statement, we would
+set ' other_args => 'input_file'.
 
 =head3 required
 
@@ -312,7 +332,11 @@ any output will occur though.
 
 None by default.
 
-=head2 Example
+=head1 SEE ALSO
+
+Several example scripts are included in the release under
+the directory 'Demo'.
+
 
 =head1 AUTHOR
 
@@ -389,8 +413,8 @@ sub build_help {
 		foreach my $option (sort @list) {
 			my $o = ($option =~ /^-(.)/)[0];
 			push @options, $o;
-			if ($template->{$option}{n_values}) {
-				foreach my $i (0..($template->{$option}{n_values} - 1)) {
+			if ($template->{$option}{'n_values'}) {
+				foreach my $i (0..($template->{$option}{'n_values'} - 1)) {
 					push @args, "${o}_arg" . (($i) ? (${i} + 1) : '');
 				}
 			}
@@ -404,9 +428,9 @@ sub build_help {
 		my (@options);
 		foreach my $option (sort @list) {
 			push @options, $option;
-			if ($template->{$option}{n_values}) {
+			if ($template->{$option}{'n_values'}) {
 				my $o = ($option =~ /^--(.*)/)[0];
-				foreach my $i (0..($template->{$option}{n_values} - 1)) {
+				foreach my $i (0..($template->{$option}{'n_values'} - 1)) {
 					$options[-1] .= " ${o}_arg" . (($i) ? ${i} : '');
 				}
 			}
@@ -438,20 +462,21 @@ sub build_help {
 		$template,
 		grep(/^--/ && $required{$_}, keys %$template),
 	);
-	my $usage = join (' ', "USAGE: $name",
-		($short_optional_arg_list || $long_optional_arg_list)
-			?	('[', $short_optional_arg_list, $long_optional_arg_list, ']')
-			: '',
-			$short_required_arg_list, $long_required_arg_list,
+	my $other_args = $template->{'other_args'} || '';
+	my $usage = join ('', "USAGE: $name ",
+		($short_optional_arg_list) ? "[ $short_optional_arg_list ] " : '',
+		($long_optional_arg_list) ?	"[ $long_optional_arg_list ] " : '',
+			$short_required_arg_list && ' ', $long_required_arg_list && ' ',
+			$other_args,
 	) . "\n";
 	# the template usage may be either a scalar or a list ref.
 	# in either case, indent by 4 spaces and terminate with a 
 	# linefeed.
-	if($template->{usage}) {
+	if($template->{'usage'}) {
 		my @use = map {"    $_\n"}
-			(ref $template->{usage})
-				? @{$template->{usage}}
-				: ($template->{usage});
+			(ref $template->{'usage'})
+				? @{$template->{'usage'}}
+				: ($template->{'usage'});
 		$usage .= join('', @use);
 	}
 	if (%required) {
@@ -460,7 +485,19 @@ sub build_help {
 		? "    Arguments " . join(', ', @r) . " are required.\n"
 		: "    Argument @r is required.\n";
 	}
-	if (my @m = grep /^-/ && $template->{$_}{multiple}, keys %$template) {
+	if (my $mutual_exclusive = $template->{'mutual_exclusive'}) {
+		if (ref $mutual_exclusive->[0]) {
+			my @r = @$mutual_exclusive;
+				$usage .= "    Arguments \""
+						. join("\", \"", map {"@$_"} @r)
+						. "\" are mutually exclusive.\n";
+		}
+		else {
+			$usage .= "    Arguments \"@{$mutual_exclusive}\""
+				. " are mutually excluive.\n";
+		}
+	}
+	if (my @m = grep /^-/ && $template->{$_}{'multiple'}, keys %$template) {
 		$usage .= join('',
 			(@m > 1)
 				? "    Arguments " . join(', ', sort @m)
@@ -475,8 +512,8 @@ sub build_help {
 	map {
 		my $options = $_;
 		# add 'arg' for each value in n_values.
-		if ($template->{$_}{n_values}) {
-			foreach my $i (1..$template->{$_}{n_values}) {
+		if ($template->{$_}{'n_values'}) {
+			foreach my $i (1..$template->{$_}{'n_values'}) {
 				$options .= ($i > 1) ? " arg_$i" : ' arg';
 				$max_len = length $options if (length $options > $max_len);
 			}
@@ -484,7 +521,7 @@ sub build_help {
 		$options_list{$_} = $options;
 	} sort grep ref $template->{$_} eq 'HASH'
 			&& /^-+/
-			&& exists $template->{$_}{help}
+			&& exists $template->{$_}{'help'}
 			, keys %$template;
 	$max_len = ((int($max_len) / 4) + 1) * 4;
 	# output is set so that the arg_list is put out the
@@ -496,9 +533,9 @@ sub build_help {
 		# -a value  first line of help
 		#           second line of help
 		#           etc and so on.
-		my @help_list = (ref $template->{$key}{help})
-			? @{$template->{$key}{help}}
-			: ($template->{$key}{help});
+		my @help_list = (ref $template->{$key}{'help'})
+			? @{$template->{$key}{'help'}}
+			: ($template->{$key}{'help'});
 		my $h = $options_list{$key};
 		map {
 			push @help, sprintf("    %-${max_len}s%s\n", $h, $_);
@@ -533,6 +570,12 @@ sub parse_template {
 		last if @errors;
 	}
 	foreach my $option (sort grep /^-+/,  keys %$template) {
+		if ($option =~ /^-[a-zA-Z]\w+/) {
+			push @errors, "Bad template option: \"$option\".  Short arguments "
+				. "(i.e. arguments starting with a\n    single dash) "
+				. "can not be longer than one character.\n";
+				last;
+		}
 		my $ref = $template->{$option};
 		foreach my $key (sort keys %$ref) {
 			if ($defined{$key}) {
@@ -544,9 +587,9 @@ sub parse_template {
 				# already took care of this.  Just skip
 			}
 			elsif ($key eq 'n_values') {
-				if ($ref->{n_values} !~ /^\d+$/) {
+				if ($ref->{'n_values'} !~ /^\d+$/) {
 					push @errors,
-						"$key: n_values is $ref->{n_values} and should be an ",
+						"$key: n_values is $ref->{'n_values'} and should be an ",
 						"integer\n";
 				}
 			}
@@ -583,16 +626,16 @@ sub parse_options {
 				my $ref = $template->{$option};
 				# If this option has already been encountered and multiple
 				# isn't set, we have an error.
-				if (exists $this->{$option}{exists} && !$ref->{multiple}) {
+				if (exists $this->{$option}{'exists'} && !$ref->{'multiple'}) {
 					push @errors,
 						"$option encountered more than once and multiple ",
 							"is not set.\n";
 				}
 				# If we have n_values set, we're pulling one or more
 				# values off the command line for this argument.
-				elsif (my $n_values = $ref->{n_values}) {
-					$this->{$option}{n_values} = $ref->{n_values};
-					$this->{$option}{multiple} = $ref->{multiple} || 0;
+				elsif (my $n_values = $ref->{'n_values'}) {
+					$this->{$option}{'n_values'} = $ref->{'n_values'};
+					$this->{$option}{'multiple'} = $ref->{'multiple'} || 0;
 					# If n_values is greater than 1, pull the next
 					# n_values values off of the command line and save
 					# it in the values list as an array ref.
@@ -609,26 +652,26 @@ sub parse_options {
 						} while (--$n_values && !@errors);
 						# Multiple, we save it as a list of lists,
 						# non-multiple, save as a list ref.
-						if ($ref->{multiple}) {
-							push(@{$this->{$option}{values}}, \@in);
+						if ($ref->{'multiple'}) {
+							push(@{$this->{$option}{'values'}}, \@in);
 						}
 						else {
-							$this->{$option}{values} = \@in;
+							$this->{$option}{'values'} = \@in;
 						}
 					}
 					else {
 						(@$argv)
-							? ($this->{$option}{multiple})
-								? push(@{$this->{$option}->{values}},
+							? ($this->{$option}{'multiple'})
+								? push(@{$this->{$option}->{'values'}},
 									shift @$argv)
-								: ($this->{$option}{values} = shift @$argv)
+								: ($this->{$option}{'values'} = shift @$argv)
 							: push @errors, "Insufficent values for $option\n";
 					}
 				}
 				# n_values isn't set.  Just push 1 on the values stack
 				# for this guy.
 				else {
-					$this->{$option}->{values} = 1;
+					$this->{$option}->{'values'} = 1;
 				}
 				if (!@errors && $ref->{callback}) {
 					if (my $error = &{$ref->{callback}}($this, $option)) {
@@ -640,7 +683,7 @@ sub parse_options {
 			else {
 				push @errors, "unrecognized option: $option\n";
 			}
-			$this->{$option}{exists}++;
+			$this->{$option}{'exists'}++;
 		}
 		last if @errors;
 	}
@@ -649,7 +692,7 @@ sub parse_options {
 # Object creater.
 sub new {
 	my $self = shift @_;
-	my (@errors, %this, @mutual_exclusive, @required);
+	my (@errors, $this, @mutual_exclusive, @required);
 	# Check for correctness of input arguments.
 	if (!ref $_[0] || ref $_[0] ne 'ARRAY') {
 		push @errors, "Usage: Getopt::OO::new(ref array, hash);\n",
@@ -663,9 +706,9 @@ sub new {
 				"hash has an odd number of elements.\n";
 		}
 	}
-	bless( \%this, $self);
 	my ($argv, %template) = @_ unless @errors;
-	$this{help} = build_help(\%template);
+	$this->{'help'} = build_help(\%template);
+	bless($this, $self);
 	unless (@errors) {
 		# Check odd elements for uniqueness.  We must check before
 		# the template before it becomes a hash or we lose the
@@ -682,11 +725,11 @@ sub new {
 		# Check to make sure we have valid input args.  All args must have
 		# 1 or 2 leading dashes or be 'required', 'mutual_exclusive' or
 		# 'usage'.
-		@errors = parse_template(\%this, \%template);
+		@errors = parse_template($this, \%template);
 	}
 	unless (@errors) {
-		parse_options(\%this, $argv, \%template);
-		@errors = (exists $this{errors}) ? @{$this{errors}} : ();
+		parse_options($this, $argv, \%template);
+		@errors = (exists $this->{errors}) ? @{$this->{errors}} : ();
 	}
 	# Check for required options.
 	unless (@errors) {
@@ -700,8 +743,8 @@ sub new {
 			# different, figure out what's missing and make
 			# an error message.
 			my %x;
-			my @r = grep !$x{$_}++ && $required{$_} && $this{$_}{exists}
-				, keys %this;
+			my @r = grep !$x{$_}++ && $required{$_} && $this->{$_}{'exists'}
+				, keys %$this;
 			unless(@r && @r == scalar(keys %required)) {
 				my %r = map {$_,1} @r;
 				my @missing = grep !$r{$_}, keys %required;
@@ -714,7 +757,7 @@ sub new {
 		if (exists $template{mutual_exclusive}) {
 			if (ref $template{mutual_exclusive}) {
 				my @mutual_exclusive = @{$template{mutual_exclusive}};
-				my @options = grep $_ =~ /^-/ && $this{$_}{exists}, keys %this;
+				my @options = grep $_ =~ /^-/ && $this->{$_}{'exists'}, keys %$this;
 				if (ref $mutual_exclusive[0]) {
 					foreach my $ref (@mutual_exclusive) {
 						my %check_hash = map {$_, 1} @$ref;
@@ -740,11 +783,11 @@ sub new {
 		}
 	}
 	if (@errors) {
-		die $this{help}, "Found following errors:\n", @errors;
+		die $this->{'help'}, "Found following errors:\n", @errors;
 	}
-	return(\%this);
+	return($this);
 }
-sub Help {return $_[0]->{help}}
+sub Help {return $_[0]->{'help'}}
 #     If no key is given, return the number of options found.
 #     If single value and no multiple set, unless user wants an
 # array back, return a scalar. If they want an array, give
@@ -758,33 +801,33 @@ sub Values {
 	if ($key) {
 		if (exists $this->{$key}) {
 			my $ref = $this->{$key};
-			($ref->{n_values})
-				? ($ref->{multiple})
-					? return(@{$ref->{values}})
-					: ($ref->{n_values} == 1)
-						? return($ref->{values})
-						: return(@{$ref->{values}})
-				: return($ref->{values} || 0)
+			($ref->{'n_values'})
+				? ($ref->{'multiple'})
+					? return(@{$ref->{'values'}})
+					: ($ref->{'n_values'} == 1)
+						? return($ref->{'values'})
+						: return(@{$ref->{'values'}})
+				: return($ref->{'values'} || 0)
 		}
 		else {
 			die "Values called on undefined option.\n";
 		}
 	}
 	else {
-		return(scalar grep /^-/ && $this->{$_}{exists}, keys %$this);
+		return(scalar grep /^-/ && $this->{$_}{'exists'}, keys %$this);
 	}
 }
 
 sub ClientData {
 	my ($this, $option, $data) = @_;
 	if ($option && $this->{$option}) {
-		$this->{$option}{client_data} = $data if @_ == 3;
+		$this->{$option}{'client_data'} = $data if @_ == 3;
 	}
 	else {
 		die "ClientData called on undefined option.\n";
 	}
-	(exists $this->{$option}{client_data})
-		? return($this->{$option}{client_data})
+	(exists $this->{$option}{'client_data'})
+		? return($this->{$option}{'client_data'})
 		: return;
 }
 1;
