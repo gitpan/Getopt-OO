@@ -1,49 +1,69 @@
+# $Log: OO.pm,v $
+# Revision 1.3  2005/01/17 06:54:57  sjs
+#
+# Makefile: move required version to 5.005.
+# Bumped version to 2.
+#
+#
+# Clean up documentaion.
+# Make use of arg vs option more consistent.
+# Get rid of 'our' variables so we could use 5.005 perl.
+# Modified mutual_exclusive so it could take either a
+#   list or list of lists.
+#
+# Revision 1.2  2005/01/11 07:50:30  sjs
+# Fixed mutual_exclude and required.
+#
+# Revision 1.1.1.1  2005/01/10 05:23:52  sjs
+# Import of Getopt::OO
+#
 package Getopt::OO;
 
-use 5.008003;
+use 5.005004;
 use strict;
-use warnings;
+# Use warnings if possible.  Don't worry if you can't.  Package was developed
+# with warnings on, but it wasn't around by default before 5.6.
+eval { require 'warnings.pm' };
+use vars qw($VERSION @ISA @EXPORT_OK);
 
 require Exporter;
 
-our @ISA = qw(Exporter);
+@ISA = qw(Exporter);
 
-our %EXPORT_TAGS = ( 'all' => [ qw(Debug Verbose) ] );
+@EXPORT_OK = qw(Debug Verbose);
 
-our @EXPORT_OK = ( @{ $EXPORT_TAGS{'all'} } );
-
-our $VERSION = '0.01';
+$VERSION = '0.02';
 
 =head1 NAME
 
 Getopt::OO - Perl object oriented version of Getopt that uses
-a template to describe command line arguments and handles
+a perl hash as template to describe command line options and handles
 most common command line parsing.
 
 =head1 SYNOPSIS
 
  use Getopt::OO qw(Debug Verbose);
 
- my ($handle, @errors) = Getopt::OO->new(\@ARGV,
-    -d => {
+ my ($handle) = Getopt::OO->new(\@ARGV,
+    '-d' => {
         help => 'turn on debug output',
         callback => sub {Debug(1); 0},
     },
-    -o => {
-        help => 'another arg.',
+    '-o' => {
+        help => 'another option.',
     },
-    -f => {
-        help => 'arg that expects one more arg.',
+    '-f' => {
+        help => 'option that expects one more value.',
         n_values => 1,
     },
-    --long {
+    '--long' {
         help => 'long option'
     },
  );
   if ($handle->Values()) {
     Debug("You will get output if -d was on command line");
     if (my $f = handle->Values(-f)) {
-        print "Got $f with the -f argment.\n";
+        print "Got $f with the -f value.\n";
     }
   }
   else {
@@ -53,20 +73,27 @@ most common command line parsing.
 =head1 DESCRIPTION
 
 Getopt::OO is an object oriented tool for parsing command line arguments.
-It expects a reference to the input arguments and parses this using
-a hash as its template.
+It expects a reference to the input arguments and uses a perl hash
+to describe how the command line arguments should be parsed.  Note
+that by parsed, we mean what options expect values, etc.  We check
+to make sure values exist on the command line as necessary -- nothing
+else.  The caller is responsible for making sure that a value that
+he knows should be a file exists, is writable, or whatever.
 
-We expect three types of arguments on the command line: arguments
-that start with a single dash, those that start with 2 dashes and
-arguments for these dashed arguments.
+Command line arguments can be broken into two distinct types: options
+and values that are associated with these options.  In windows, 
+options often start with a '/' but sometimes with a '-', but
+in unix they almost universally start with a '-'.  For this module
+options start with a '-'.  We support two types of options:
+the short single dashed options and the long double dashed arguments.
+The difference between these two is that with this module the
+short options can be combined into a single option, but the
+long options can not.  For example, most of us will be familiar
+with the tar '-xvf file' command which can also be expressed
+as '-x -v -f file'.  Long options can not be combined this way,
+so '--help' for example must always stand by itself.
 
-Input arguments that start with a single dash can be combined:
-i.e. "tar -xvf file" is the same as "tar -x -v -f file".
-
-Input arguments that start with 2 dashes are literal -- they
-will be used exactly as found.
-
-The input template expects the argument as its keys.  For instance
+The input template expects the option names as its keys.  For instance
 if you were expecting "-xv --hello" as possible command line arguments,
 the keys for your template hash would be '-x', '-v', and '--hello'.
 
@@ -86,7 +113,7 @@ equal to 0 is valid with 0 being the default.
 If this exists, it means the argument may be encountered multiple times.
 For example --
 
- 		-a => {
+ 		'-a' => {
  			n_values => 3,
  			multiple => 1,
  		 },
@@ -99,7 +126,7 @@ that it may be encountered multiple times.
 
 This must be a code reference.  If the template entry looked like:
 
-   		-a => {
+   		'-a' => {
    			n_values => 1,
   			multiple => 1,
   			callback => \&xyz,
@@ -110,7 +137,7 @@ and the option found and the argument reference.  For instance
 if the function looked like:
 
  sub Callback {
- 	my ($handle, $option, $arg_list) = @_
+ 	my ($handle, $option) = @_
  	...
 
 the caller could get help with $handle->Help() or its values with
@@ -124,15 +151,13 @@ the command line looked like '-xvfz 1 2 3', and the v and f options
 both expected one additional value, the argument list would have
 only the '3' left and $handle->Values($option) would return 2.
 
-If the callback returns a non-zero value, it failed.  If this
-is a string (i.e. non-int) we add this string to the list of errors.
-If it is an int and die is enabled, we will exit with the value
-returned.
+If the callback returns a non-0 defined value, it failed.  We
+execute 'die $string' where $string is the returned value.
 
 =head2 Template non-dashed arguments
 
-Only four  non-dashed  keys are allowed: 'required' and 'usage' and
-'die' and 'mutual_exclusive'.
+Only four  non-dashed  keys are allowed: 'required' and 'usage'
+and 'mutual_exclusive'.
 
 =head3 usage
 
@@ -142,12 +167,6 @@ the various dashed arguments in the template, creates the complete
 usage message.  By default, we will create a usage string that
 is the base name of the executable ($0) and just the string
 '[options]'.
-
-=head3 die
-
-By default, behaviour is to check for errors and if any are
-encountered, print usage, an error and die.  To return
-even if errors are encountered, set die => 0.
 
 =head3 required
 
@@ -160,29 +179,45 @@ This is an list  reference.  It says "it is an error to receive
 these arguments at the same time."   For example, "tar cx" would not
 make sense because you can't both create and extract at the
 same time.  Give a reference for each set of mutually exclusive
-arguments.  The template to express this might look like:
+arguments.  In the trivial case where you only have one set, the
+argument can be just a reference to a list, but in the more complicated
+case where you have sets of mutually exclusive arguments, this will
+be a refrence to an list of list references.  The template to express
+this might look like:
 
- 		mutual_exclusive => [
- 			[ qw( -x -c ) ],
-		],
- 		-x => {
- 			help => 'Extract a tar file',
- 		},
- 		-c => {
- 			help => 'Create a tar file',
- 		}
+        mutual_exclusive => [ qw( -x -c ) ],
+        -x => {
+            help => 'Extract a tar file',
+        },
+        -c => {
+            help => 'Create a tar file',
+        }
 
+As stated above, this would also be correct.
+
+        mutual_exclusive => [ 
+            [qw( -x -c )],
+        ],
+        -x => {
+            help => 'Extract a tar file',
+        },
+        -c => {
+            help => 'Create a tar file',
+        }
 
 =head2 Methods associated with the OO module:
 
-=head3 my($handle, @errors) = new(\@ARGV, %Template)
+=head3 my $handle = Getopt::OO->new(\@ARGV, %Template)
 
 Creator function.  Expects a reference to the argument list and
 a template that explanes how to parse the input arguments.   Returns
-an object reference and a list of errors.  We also have a
-Errors method later that can be used to retrieve any errors
-if you prefer accessing the errors and the object handle
-separately.
+an object reference.  If you want to catch any possible errors, do
+
+ my $handle = eval {Getopt::OO>new(\@ARGV, %template)};
+ if ($@) {...
+
+$@ will contain your error string if one exists and be empty 
+otherwise.
 
 =head3 $handle->Values(argument);
 
@@ -216,11 +251,11 @@ and the following to create our GetOpt handle:
  use Getopt::OO qw(Debug);
  my @argv = qw (-abcde b c0 d0 d1 e0 e1 -c c1 -e e2 es);
  my $h = Getopt::OO->new(\@argv,
- 	-a => {},
- 	-b => { n_values => 1, },
- 	-c => { n_values => 1, multiple => 1, },
- 	-d => { n_values => 2, },
- 	-e => { n_values => 2, multiple => 1, },
+ 	'-a' => {},
+ 	'-b' => { n_values => 1, },
+ 	'-c' => { n_values => 1, multiple => 1, },
+ 	'-d' => { n_values => 2, },
+ 	'-e' => { n_values => 2, multiple => 1, },
  );
  my $n_options = $h->Values();
  my $a = $h->Values('-a');
@@ -231,7 +266,16 @@ and the following to create our GetOpt handle:
 
  Example 1.  ValuesDemo.pl
 
-=head2 ClientData();
+=head3 my $help_string = $handle->Help();
+
+Get the string string we built for this template.  Note
+that this can be used to check the template to make sure
+it is doing what you expect.  It will contain optional
+arguments separated from non optional, indicates required
+and mutually exclusive options and indicates which options
+expect values and how many values.
+
+=head3 my $client_data = $handle->ClientData($option);
 
 The ClientData method is supplied to allow data to be 
 associated with an option.  The data must be scalar or
@@ -291,7 +335,7 @@ at your option, any later version of Perl 5 you may have available.
 	#  Debug($fh);
 	#  Debug(1);			turns on debug output.
 	#  Debug(0);			turns of debug output.
-	#  Debut("%2d\n", $x);	for printf style output.
+	#  Debug("%2d\n", $x);	for printf style output.
 	#  Debug($string);		for print style output.
 	# Verose behaviour is identical to Debug output.
 	# Any call to Debug returns its state -- on or off.
@@ -425,19 +469,19 @@ sub build_help {
 		);
 	}
 
-	my %arg_list;
+	my %options_list;
 	my $max_len = 0;
 	my @help;
 	map {
-		my $args = $_;
-		# add 'arg' for each value in n_args.
+		my $options = $_;
+		# add 'arg' for each value in n_values.
 		if ($template->{$_}{n_values}) {
 			foreach my $i (1..$template->{$_}{n_values}) {
-				$args .= ($i > 1) ? " arg_$i" : ' arg';
-				$max_len = length $args if (length $args > $max_len);
+				$options .= ($i > 1) ? " arg_$i" : ' arg';
+				$max_len = length $options if (length $options > $max_len);
 			}
 		}
-		$arg_list{$_} = $args;
+		$options_list{$_} = $options;
 	} sort grep ref $template->{$_} eq 'HASH'
 			&& /^-+/
 			&& exists $template->{$_}{help}
@@ -446,16 +490,16 @@ sub build_help {
 	# output is set so that the arg_list is put out the
 	# first time only and all the actual help is justified 
 	# to the right of the argument list.
-	foreach my $key (sort keys %arg_list) {
+	foreach my $key (sort keys %options_list) {
 		# the help element may be either a string or a list ref.
 		# output should look like:
-		# -a arg    first line of help
+		# -a value  first line of help
 		#           second line of help
 		#           etc and so on.
 		my @help_list = (ref $template->{$key}{help})
 			? @{$template->{$key}{help}}
 			: ($template->{$key}{help});
-		my $h = $arg_list{$key};
+		my $h = $options_list{$key};
 		map {
 			push @help, sprintf("    %-${max_len}s%s\n", $h, $_);
 			$h = ''
@@ -476,14 +520,10 @@ sub parse_template {
 	foreach my $option (sort grep !/^-+/,  keys %$template) {
 		my $ref = $template->{$option};
 		if ($option eq 'mutual_exclusive') {
-			unless (ref $ref eq 'ARRAY'
-				&& grep(ref $_ eq 'ARRAY', @$ref) == 0) {
+			unless (ref $ref eq 'ARRAY') {
 				push @errors, "Bad mutual_exclusive argument.  Should be ",
-					" a list of lists.\n";
+					"a list or a list of lists.\n";
 			}
-		}
-		elsif ($option eq 'die') {
-			# This was already handled.  We need it early!
 		}
 		elsif ($option eq 'required') {
 			unless (ref $ref && ref $ref eq 'ARRAY') {
@@ -516,7 +556,7 @@ sub parse_template {
 				push @errors, "$key has invalid keys: @bad\n";
 			}
 			else {
-				push @errors, "Unrecognized argument: $key\n";
+				push @errors, "Unrecognized option: $key\n";
 			}
 			last if @errors;
 		}
@@ -564,7 +604,7 @@ sub parse_options {
 							}
 							else {
 								push @errors,
-									"Insufficent arguments for $option\n";
+									"Insufficent values for $option\n";
 							}
 						} while (--$n_values && !@errors);
 						# Multiple, we save it as a list of lists,
@@ -582,7 +622,7 @@ sub parse_options {
 								? push(@{$this->{$option}->{values}},
 									shift @$argv)
 								: ($this->{$option}{values} = shift @$argv)
-							: push @errors, "Insufficent arguments for $option\n";
+							: push @errors, "Insufficent values for $option\n";
 					}
 				}
 				# n_values isn't set.  Just push 1 on the values stack
@@ -598,7 +638,7 @@ sub parse_options {
 				}
 			}
 			else {
-				push @errors, "unrecognized argument: $option\n";
+				push @errors, "unrecognized option: $option\n";
 			}
 			$this->{$option}{exists}++;
 		}
@@ -625,8 +665,6 @@ sub new {
 	}
 	bless( \%this, $self);
 	my ($argv, %template) = @_ unless @errors;
-	# Check die early in case we need it.
-	$this{die} = (exists $template{die}) ? $template{die} : 1;
 	$this{help} = build_help(\%template);
 	unless (@errors) {
 		# Check odd elements for uniqueness.  We must check before
@@ -642,47 +680,72 @@ sub new {
 		# Build help first so we have something to print on error exit.
 
 		# Check to make sure we have valid input args.  All args must have
-		# 1 or 2 leading dashes or be 'required', 'mutual_exclusive', 'die' or
+		# 1 or 2 leading dashes or be 'required', 'mutual_exclusive' or
 		# 'usage'.
 		@errors = parse_template(\%this, \%template);
 	}
 	unless (@errors) {
-		@required = ($template{'required'}) ? @{$template{'required'}} : ();
-		@mutual_exclusive = ($template{'mutual_exclusive'})
-			? @{$template{'mutual_exclusive'}}
-			: ();
 		parse_options(\%this, $argv, \%template);
 		@errors = (exists $this{errors}) ? @{$this{errors}} : ();
 	}
-	# Check for mutually exclusive arguments.
+	# Check for required options.
 	unless (@errors) {
-		foreach my $ref (@mutual_exclusive) {
-			my %check_hash = map {$_, 1} @$ref;
-			if ((my @bad = grep $check_hash{$_}, keys %this) > 1) {
-				push @errors, "Found mutually exclusive arguments: ",
-					"@bad\n";
+		my %required = ($template{'required'})
+			? map {$_, 1} @{$template{'required'}}
+			: ();
+		if (%required) {
+			# pull any required options we encountered out,
+			# compare the number of required found against
+			# the number of required options and if they are
+			# different, figure out what's missing and make
+			# an error message.
+			my %x;
+			my @r = grep !$x{$_}++ && $required{$_} && $this{$_}{exists}
+				, keys %this;
+			unless(@r && @r == scalar(keys %required)) {
+				my %r = map {$_,1} @r;
+				my @missing = grep !$r{$_}, keys %required;
+				push @errors, "Missing required options: @missing\n";
+			}
+		}
+	}
+	# Check for mutually exclusive options.
+	unless (@errors) {
+		if (exists $template{mutual_exclusive}) {
+			if (ref $template{mutual_exclusive}) {
+				my @mutual_exclusive = @{$template{mutual_exclusive}};
+				my @options = grep $_ =~ /^-/ && $this{$_}{exists}, keys %this;
+				if (ref $mutual_exclusive[0]) {
+					foreach my $ref (@mutual_exclusive) {
+						my %check_hash = map {$_, 1} @$ref;
+						if ((my @bad = grep $check_hash{$_}, @options) > 1) {
+							push @errors, "Found mutually exclusive options: ",
+								"@bad\n";
+						}
+					}
+				}
+				# simple case: this could be just a list.
+				else {
+					my %check_hash = map {$_, 1} @mutual_exclusive;
+					if ((my @bad = grep $check_hash{$_}, @options) > 1) {
+						push @errors, "Found mutually exclusive options: ",
+							"@bad\n";
+					}
+				}
+			}
+			else {
+				die "argument to mutual_exclusive should be an ",
+					"array reference.\n";
 			}
 		}
 	}
 	if (@errors) {
-		if ($this{die}) {
-			die $this{help}, "Found following errors:\n", @errors;
-		}
-		else {
-			# to eliminate confusion, if there were errors,
-			# throw out all but help and errors.
-			%this = (
-				help => $this{help},
-				errors => \@errors,
-			);
-		}
+		die $this{help}, "Found following errors:\n", @errors;
 	}
-	(wantarray)
-		? return(\%this, @errors)
-		: return(\%this);
+	return(\%this);
 }
 sub Help {return $_[0]->{help}}
-#     If no key is given, return the number of arguments found.
+#     If no key is given, return the number of options found.
 #     If single value and no multiple set, unless user wants an
 # array back, return a scalar. If they want an array, give
 # 'em an array. 
@@ -704,9 +767,7 @@ sub Values {
 				: return($ref->{values} || 0)
 		}
 		else {
-			push @{$this->{errors}}, "Values called on undefined option.\n";
-			die @{$this->{errors}} if $this->{die};
-			return;
+			die "Values called on undefined option.\n";
 		}
 	}
 	else {
@@ -720,9 +781,7 @@ sub ClientData {
 		$this->{$option}{client_data} = $data if @_ == 3;
 	}
 	else {
-		push @{$this->{errors}}, "ClientData called on undefined option.\n";
-		die @{$this->{errors}} if $this->{die};
-		return;
+		die "ClientData called on undefined option.\n";
 	}
 	(exists $this->{$option}{client_data})
 		? return($this->{$option}{client_data})

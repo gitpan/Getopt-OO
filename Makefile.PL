@@ -1,4 +1,13 @@
-use 5.008003;
+# $Log: Makefile.PL,v $
+# Revision 1.2  2005/01/17 06:52:36  sjs
+#
+# Makefile: move required version to 5.005.
+# Bumped version to 2.
+#
+# Revision 1.1.1.1  2005/01/10 05:23:52  sjs
+# Import of Getopt::OO
+#
+use 5.005;
 use ExtUtils::MakeMaker;
 # See lib/ExtUtils/MakeMaker.pm for details of how to influence
 # the contents of the Makefile that is written.

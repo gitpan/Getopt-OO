@@ -1,5 +1,8 @@
 #!/usr/local/bin/perl -w
-# $Log:$
+# $Log: HelpDemo.pl,v $
+# Revision 1.1.1.1  2005/01/10 05:23:52  sjs
+# Import of Getopt::OO
+#
 use IO::File;
 use Getopt::OO qw(Debug);
 
