@@ -1,9 +1,10 @@
 Changes
-Makefile.PL
-MANIFEST
-README
-t/Getopt-OO.t
-lib/Getopt/OO.pm
+Demo/Giant.pl
 Demo/HelpDemo.pl
 Demo/ValuesDemo.pl
-META.yml                                 Module meta-data (added by MakeMaker)
+lib/Getopt/OO.pm
+Makefile.PL
+MANIFEST
+META.yml			Module meta-data (added by MakeMaker)
+README
+t/Getopt-OO.t

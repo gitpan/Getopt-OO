@@ -1,3 +1,4 @@
+
 Revision history for Perl extension Getopt::OO.
 
 0.01  Wed Dec 29 14:07:26 2004
@@ -23,3 +24,25 @@ Revision history for Perl extension Getopt::OO.
       in 0.02.
     - Made changes so we should work under PERL 5.004 but this
       has not yet been tested.
+0.04 Sunday 1/23/2004
+    - Renamed the other_args to be other_values to make things
+      more consistent.
+    - other_values no takes a number instead of a string and can
+      be used to help the parser know how many arguments are expected
+      after all the options have been parsed.
+    - Changes so we would work under 5.4 perl.
+    - Changes to docs to cleanup and reflect changes to code.
+    - Added multi-valued option.  Syntax is --arg ... - where
+      the final '-' can be either the start of the next argument
+      or a free-standing dash.
+    - Fixed a problem with calculation of the indent for the
+      help strings.
+    - Added code to better check the non-dashed tags for validity.
+    - Fixed a problem that was causing options to be dropped from
+      the first line of the usage output.
+    - Added more test cases for new options and to better check
+      old ones.
+    - Print line numbers for test when test is run as
+      perl -Ilib t/Getopt-OO.t
+
+

@@ -1,43 +1,18 @@
 # $Log: Getopt-OO.t,v $
-# Revision 1.5  2005/01/18 03:44:32  sjs
-# Fixed to handle changes to usage statement.
-# Added test to catch bogus short args.
+# Revision 1.7  2005/01/23 22:18:34  sjs
+# Fixed test 51.
 #
-# Revision 1.4  2005/01/17 06:55:13  sjs
+# Revision 1.6  2005/01/23 20:38:23  sjs
+# Mostly addition of test cases for new code.
+# Print linenumbers for failed tests.
 #
-# Makefile: move required version to 5.005.
-# Bumped version to 2.
-#
-#
-# Clean up documentaion.
-# Make use of arg vs option more consistent.
-# Get rid of 'our' variables so we could use 5.005 perl.
-# Modified mutual_exclusive so it could take either a
-#   list or list of lists.
-#
-# Revision 1.3  2005/01/11 07:51:33  sjs
-# Added tests for mutual_exclude and for required.
-# Fixed a problem where test file was being opened
-# for read but written to.
-#
-# Revision 1.2  2005/01/10 05:56:01  sjs
-# fixed Debug file test.  Was not opening file for read before reading.
-#
-# Revision 1.1.1.1  2005/01/10 05:23:52  sjs
-# Import of Getopt::OO
-#
-use IO::File;
 $| = 1;
+use IO::File;
+use strict;
 
-#If we can''t find our lib or are somehow wrong version, abort!
-my $TestVersion;
 BEGIN{
-	$TestVersion = '0.03';
 	eval {
 		require 'Getopt/OO.pm';
-		$Getopt::OO::VERSION eq $TestVersion
-			|| die("Testing Getopt::OO VERSION $TestVersion and found ",
-				"$Getopt::OO::VERSION\n");
 	};
 	die "1..1\n${@}not ok" if $@;
 };
@@ -57,32 +32,50 @@ BEGIN{
 	sub OK{
 		my ($test, $string) = @_;
 		$number_completed++;
-		print(($test)? '' : "$string\nnot ", "ok $number_completed\n");
+		my $line_number = (caller(0))[2];
+		print(($test)
+			? ''
+			: "line $line_number:$string\nnot "
+			, "ok $number_completed\n");
 	}
 }
 
 	#########################
 
 {
-my $help = 'USAGE: Getopt-OO.t [ -ab  ] 
+my $help = 'USAGE: Getopt-OO.t  [-ab ]
     -a  help for a
     -b  help for b
 ';
-	my $h = Getopt::OO->new(
-		['-a'],
-		'-a' => {help => 'help for a'},
-		'-b' => {help => 'help for b'},
-	);
-	OK(defined $h, 				"Handle returned.");
-	OK($h->isa('Getopt::OO'),	"Handle looks good.");
-	OK($h->Help() eq $help, 	"Looks good for Help trivial case.");
-	OK($h->Values() == 1, 		"Looks good for Values trivial case.");
-	OK($h->Values('-a') == 1, 	"Looks good for Values trivial case.");
-	OK($h->Values('-b') == 0, 	"Looks good for Values trivial case.");
+	my $h;
+	eval {
+		$h = Getopt::OO->new(
+			['-a'],
+			'-a' => {help => 'help for a'},
+			'-b' => {help => 'help for b'},
+		);
+	};
+	OK(!$@,						"Crashed");
+	OK(defined $h, 				"No handle returned");
+	if (defined $h) {
+		OK($h->isa('Getopt::OO'),	"Handle looks wrong.");
+		OK($h->Help() eq $help, 	"Help looks wrong:" . $h->Help());
+		OK(
+			$h->Values() == 1, 
+			"Values looks wrong for checking number of ars"
+		);
+		OK(
+			$h->Values('-a') == 1,
+			"Value looks wrong for 1 boolean found"
+		);
+		OK(
+			$h->Values('-b') == 0, 	"Value looks wrong for 1 boolean not found"
+		);
+	}
 }
+# Check for multiple declaration.
 {
-	# Make sure die works right.
-my $error = 'USAGE: Getopt-OO.t [ -a  ] 
+my $error = 'USAGE: Getopt-OO.t  [-a ]
     -a  help for a
 Found following errors:
 Options "-a" declared more than once.
@@ -95,7 +88,34 @@ Options "-a" declared more than once.
 		);
 	};
 	my $e = $@;
-	OK($@ eq $error, "option declared more than once");
+	OK($@ eq $error, "$@");
+}
+# Check that values returns are right.
+{
+	my $h;
+	eval {
+		$h = Getopt::OO->new(
+			[],
+			'-a'	=> {},
+			'-b'	=> {},
+			'--a'	=> {},
+		);
+	};
+	OK(!$@,  "Crashed");
+	OK($h->Values() == 0, "Empty failed");
+	my @argv = qw (-a --a -b);
+	my @test = @argv;
+	eval {
+		$h = Getopt::OO->new(
+			\@argv,
+			'-a'	=> {},
+			'-b'	=> {},
+			'--a'	=> {},
+		);
+	};
+	OK(!$@,  "Crashed");
+	OK($h->Values() == scalar(@test), "Not empty failed");
+	OK(join(' ', $h->Values()) eq join(' ', @test), "Order failed");
 }
 # Check return values and types are right.
 {
@@ -113,22 +133,22 @@ Options "-a" declared more than once.
 	 my @c = $h->Values('-c');
 	 my @d = $h->Values('-d');
 	 my @e = $h->Values('-e');
-	OK($n_options && $n_options == 5, "Right number of args.");
-	OK($a && $a == 1, 					"-a is ok.");
-	OK($b && $b eq 'b',					"-b is ok.");
+	OK($n_options && $n_options == 7, "Wrong number of args");
+	OK($a && $a == 1, 					"-a Failed");
+	OK($b && $b eq 'b',					"-b Failed");
 	OK(@c && @c == 2 
 		&& $c[0] eq 'c0'
-		&& $c[1] eq 'c1',				"-c is ok.");
+		&& $c[1] eq 'c1',				"-c Failed");
 	OK(@d && @d == 2 
 		&& $d[0] eq 'd0'
-		&& $d[1] eq 'd1',				"-d is ok.");
+		&& $d[1] eq 'd1',				"-d Failed");
 	OK(@e && @e == 2 && ref $e[0] 
 		&& ref $e[0] eq 'ARRAY'
 		&& $e[0]->[0] eq 'e0'
 		&& $e[0]->[1] eq 'e1'
 		&& ref $e[1] eq 'ARRAY'
 		&& $e[1]->[0] eq 'e2'
-		&& $e[1]->[1] eq 'e3' ,			"-e is ok.");
+		&& $e[1]->[1] eq 'e3' ,			"-e Failed");
 }
 # Test Verbose and Debug.
 {
@@ -153,7 +173,7 @@ Options "-a" declared more than once.
 	$fh->close();
 	$fh = IO::File->new("$tmp");
 	my @x = <$fh>;
-	OK("@x" eq "@debug_test", "Verbose redirect is ok.");
+	OK("@x" eq "@debug_test", "Debug redirect Failed");
 
 	my @verbose_test = ("testing Verbose\n");
 	$fh = IO::File->new("> $tmp");
@@ -163,7 +183,7 @@ Options "-a" declared more than once.
 	$fh->close();
 	$fh = IO::File->new("$tmp");
 	 @x = <$fh>;
-	OK("@x" eq "@verbose_test", "Verbose redirect is ok.");
+	OK("@x" eq "@verbose_test", "Verbose redirect Failed ok.");
 	unlink($tmp);
 }
 # test callback.
@@ -175,8 +195,9 @@ Options "-a" declared more than once.
 	);
 	OK($x == 27, 		"callback with no error works.");
 }
+# Test callback.
 {
-my $error = 'USAGE: Getopt-OO.t [ -a  ] 
+my $error = 'USAGE: Getopt-OO.t  [-a ]
 Found following errors:
 Callback returned an error:
 	callback with an error
@@ -188,9 +209,9 @@ Callback returned an error:
 			'-a' => { callback => sub{$x = 27; "callback with an error" }, }
 		);
 	};
-	OK($@ eq $error,		"callback with error works ok.");
+	OK($@ eq $error,		"callback with error FAILED:\n" . $@);
 }
-	# Check ClientDate.
+# Check ClientDate.
 {
 	my $h = Getopt::OO->new(
 		[ '-a' ],
@@ -199,22 +220,22 @@ Callback returned an error:
 	my $x = $h->ClientData('-a');
 	$h->ClientData('-a', '27');
 	my $y = $h->ClientData('-a');
-	OK(!defined $x && $y == 27,				"ClientData works ok.\n");
+	OK(!defined $x && $y == 27,				"ClientData failed.\n");
 }
 # Check for required.
 {
-	my $h = eval {
-		Getopt::OO->new(
-			[ '-b' ],
-			required => [ '-a' ],
-			'-a' => {},
-			'-b' => {},
+	my $h;
+	eval {
+		$h = Getopt::OO->new(
+			[ '-b', '--b' ],
+			required => [ '-a', '-bb',  ],
+			'-a' => { help => 'help for -a', },
+			'-b' => { help => 'help for -b', },
+			'--b' => { help => 'help for --b', },
 		);
 	};
-	OK($@ && $@ =~ /Missing required/,	"found missing required ok.\n");
-}
-{
-	my $h = eval {
+	OK($@ && $@ =~ /Missing required/,	"found missing required failed.\n");
+	$h = eval {
 		Getopt::OO->new(
 			[ '-b', '-a' ],
 			required => [ '-a' ],
@@ -222,8 +243,9 @@ Callback returned an error:
 			'-b' => {},
 		);
 	};
-	OK(!$@,					 					"found required ok.\n");
+	OK(!$@,					 			"found required FAILED.\n");
 }
+# Check mutual exclusive.
 {
 	my $h = eval {
 		Getopt::OO->new(
@@ -236,9 +258,7 @@ Callback returned an error:
 		);
 	};
 	OK($@ eq '', 						"no mutual_exclusive ok.\n");
-}
-{
-	my $h = eval {
+	$h = eval {
 		Getopt::OO->new(
 			['-a', '-b'],
 			mutual_exclusive => [
@@ -249,28 +269,6 @@ Callback returned an error:
 		);
 	};
 	OK($@ =~ /Found mutually exclusive/,"simple bad mutual_exclusive ok.\n");
-}
-{
-	my $h = eval {
-		Getopt::OO->new(
-			['-a'],
-			mutual_exclusive => [ '-b', '-a' ],
-			'-a' => {},
-			'-b' => {},
-		);
-	};
-	OK($@ eq '', 						"simple no mutual_exclusive ok.\n");
-}
-{
-	my $h = eval {
-		Getopt::OO->new(
-			['-a', '-b'],
-			mutual_exclusive => [ '-b', '-a' ],
-			'-a' => {},
-			'-b' => {},
-		);
-	};
-	OK($@ =~ /Found mutually exclusive/,"bad mutual_exclusive ok.\n");
 }
 # Check to make sure we catch bad argument.
 {
@@ -283,19 +281,152 @@ Callback returned an error:
 
 	OK($@, 'xxx');
 }
-# Make sure the other_args statement works right.
+# Check multi_options
 {
-	my $other_arg = 'file0, file5, file99';
-	my $h = eval {
-		Getopt::OO->new (
-			[ qw (-a) ],
-			'other_args' => $other_arg,
-			'-a' => {}
-		)
+	my $h;
+	eval {
+		$h = Getopt::OO->new(
+			[qw(--a 1 2 3)],
+			'--a' => {
+				multi_value => 1,
+			},
+		);
 	};
-
-	my $hh = $h->Help();
-	OK ($hh =~ /$other_arg\n/, "other_args");
+	OK($@ && $@ =~ /Failed to find end to multi_value/,
+		"Unterminated multi-value"
+	);
+	eval {
+		$h = Getopt::OO->new(
+			[qw(--a 1 2 3 -)],
+			'--a' => {
+				multi_value => 1,
+			},
+		);
+	};
+	OK(!$@, "multi_value failed:\n" . $@);
+	OK(join(' ', $h->Values('--a')) eq '1 2 3',
+		"non multiple multi-value"
+	);
+	eval {
+		$h = Getopt::OO->new(
+			[qw(--a 1 2 3 - --a 1 2 3 -)],
+			'--a' => {
+				multi_value => 1,
+			},
+		);
+	};
+	OK($@ && $@ =~ /encountered more than once/,
+		"bad multiple multi-value"
+	);
+	eval {
+		$h = Getopt::OO->new(
+			[qw(--a 1 2 3 - --a 4 5 6 -)],
+			'--a' => {
+				multi_value => 1,
+				multiple => 1,
+			},
+		);
+	};
+	OK(!$@, "good multiple multi-value\n" . $@);
+	if (!$@) {
+		my @values = $h->Values('--a');
+		OK(@values && @values == 2 && ref $values[0] && ref $values[1]
+			&& join(' ', (map {@$_} @values)) eq '1 2 3 4 5 6',
+			"good multiple multi-value return."
+		);
+	}
 }
-
-__END__
+# Complicated -- check everything.
+{
+	my $help = 'USAGE: Getopt-OO.t  [-bc b_arg c_arg] [--b b_arg --c ... - --d ... -] -a  --a arg
+    Arguments --a, -a are required.
+    Arguments "-a -b" are mutually exclusive.
+    Argument -c may occur more than once.
+    --a     help for --a
+    --b arg help for --b
+    --c ... -help for --c
+    --d ... -help for --d
+    -a      help for -a
+    -b arg  help for -b
+    -c arg  help for -c
+';
+	my $h;
+	my @argv = qw(-a --a --c 1 2 3 - abc);
+	eval {
+		$h = Getopt::OO->new(
+			\@argv,
+			'required'			=> [ '-a', '--a', ],
+			'mutual_exclusive'	=> [ [ '-a', '-b', ], ],
+			'other_values'		=> 1,
+			'-a' => {'help'		=> 'help for -a'},
+			'-b' => {
+				'help'			=> 'help for -b',
+				'n_values'		=> 1,
+			},
+			'-c' => {
+				'help'			=> 'help for -c',
+				'n_values'		=> 1,
+				'multiple'		=> 1,
+			},
+			'--a' => {
+				'help'			=> 'help for --a',
+			},
+			'--b' => {
+				'help'			=> 'help for --b',
+				'n_values'		=> 1,
+			},
+			'--c' => {
+				'help'			=> 'help for --c',
+				'multi_value'	=> 1,
+			},
+			'--d' => {
+				'help'			=> 'help for --d',
+				'multi_value'	=> 1,
+			},
+		);
+	};
+	OK(! $@,					"    Crashed: error $@");
+	OK(defined $h, 				"    No handle returned");
+	if (defined $h) {
+		OK($h->isa('Getopt::OO'),	"    Handle looks wrong.");
+		OK(
+			$h->Help() eq $help, 
+			"    Help looks wrong:\n" . $h->Help()
+		);
+		OK(
+			$h->Values('--a') == 1, 
+			"Values not right for arg found"
+		);
+		OK(
+			$h->Values('--c') == 3
+			&& join(' ', $h->Values('--c')) eq '1 2 3'
+			, 'multi-values return looks right'
+		);
+		OK(!$h->Values('--d'), 'multi-values empty return looks right');
+		OK(@argv == 1 && $argv[0] eq 'abc', "other_values is broken.");
+	}
+}
+# Check other_values to make sure it's right and wrong.
+{
+	my $h;
+	eval {
+		$h = Getopt::OO->new(
+			[qw(-a abc)],
+			'-a' => { 'n_values' => 1, },
+			'other_values' => 1,
+		);
+	};
+	OK(
+		$@ && $@ =~ /Expected 1/,
+		"Failed to catch wrong other_values\n"
+	);
+	my @argv = qw(-a abc def);
+	eval {
+		$h = Getopt::OO->new(
+			\@argv,
+			'-a' => { 'n_values' => 1, },
+			'other_values' => 1,
+		);
+	};
+	OK(@argv == 1 && $argv[0] eq 'def', "argv not right.");
+}

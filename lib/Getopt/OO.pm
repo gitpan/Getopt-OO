@@ -1,6 +1,31 @@
+#!/usr/local/bin/perl -w
 # $Log: OO.pm,v $
+# Revision 1.7  2005/01/23 21:38:45  sjs
+# Fixed some problems with the pod and pod2man on older versions.
+#
+# Revision 1.6  2005/01/23 20:59:31  sjs
+# Fixed a problem with multi_value not catching end of arguments
+# correctly if option was not a '-'.
+#
+# Revision 1.5  2005/01/23 20:34:04  sjs
+# - Renamed the other_args to be other_values to make things
+#   more consistent.
+# - other_values no takes a number instead of a string and can
+#   be used to help the parser know how many arguments are expected
+#   after all the options have been parsed.
+# - Changes so we would work under 5.4 perl.
+# - Changes to docs to cleanup and reflect changes to code.
+# - Added multi-valued option.  Syntax is --arg ... - where
+#   the final '-' can be either the start of the next argument
+#   or a free-standing dash.
+# - Fixed a problem with calculation of the indent for the
+#   help strings.
+# - Added code to better check the non-dashed tags for validity.
+# - Fixed a problem that was causing options to be dropped from
+#   the first line of the usage output.
+#
 # Revision 1.4  2005/01/18 03:44:02  sjs
-# Added new other_args option.
+# Added new other_values option.
 # Added additional error checking.
 # Added changes to support PERL 5.004.
 # Modified USAGE message to also show mutual_exclusive options.
@@ -26,7 +51,7 @@
 #
 package Getopt::OO;
 
-use 5.005004;
+use 5.00404;
 use strict;
 # Use warnings if possible.  Don't worry if you can't.  Package was developed
 # with warnings on, but it wasn't around by default before 5.6.
@@ -39,14 +64,14 @@ require Exporter;
 
 @EXPORT_OK = qw(Debug Verbose);
 
-$VERSION = '0.03';
-$Revision = '$Id: OO.pm,v 1.4 2005/01/18 03:44:02 sjs Exp $';
+$VERSION = '0.04';
+$Revision = '$Id: OO.pm,v 1.7 2005/01/23 21:38:45 sjs Exp $';
 
 =head1 NAME
 
-Getopt::OO - Perl object oriented version of Getopt that uses
-a perl hash as template to describe command line options and handles
-most common command line parsing.
+Getopt::OO - An object oriented command line parser.  It handles
+short, long and multi (--x ... -) value options.  It also incorporates
+help for options to simplify generation of usage statements.
 
 =head1 SYNOPSIS
 
@@ -67,6 +92,15 @@ most common command line parsing.
     '--long' {
         help => 'long option'
     },
+    '--multiple_values' => {
+        help =>  [
+            "Everything between '--multiple_values' and '-' is",
+            "an value for this options",
+        ],
+        'multi_values' => 1,
+        'multiple= => 1, # Can happen more than once on command line.
+    },
+    other_values => 2,
  );
   if ($handle->Values()) {
     Debug("You will get output if -d was on command line");
@@ -93,81 +127,92 @@ and values that are associated with these options.  In windows,
 options often start with a '/' but sometimes with a '-', but
 in unix they almost universally start with a '-'.  For this module
 options start with a '-'.  We support two types of options:
-the short single dashed options and the long double dashed arguments.
+the short single dashed options and the long double dashed options.
 The difference between these two is that with this module the
 short options can be combined into a single option, but the
 long options can not.  For example, most of us will be familiar
-with the tar '-xvf file' command which can also be expressed
-as '-x -v -f file'.  Long options can not be combined this way,
+with the C<tar -xvf file> command which can also be expressed
+as C<-x -v -f file>.  Long options can not be combined this way,
 so '--help' for example must always stand by itself.
 
 The input template expects the option names as its keys.  For instance
-if you were expecting "-xv --hello" as possible command line arguments,
-the keys for your template hash would be '-x', '-v', and '--hello'.
+if you were expecting C<-xv --hello> as possible command line options,
+the keys for your template hash would be C<-x>, C<-v>, and C<--hello>.
 
-=head2 Valid values for each dashed argument are:
+=head1 Valid values for each dashed options are:
 
-=head3 help
+=head2 help
 
-A help string associated with the argument.
 
-=head3 n_values
+A help string associated with the options.
 
-Number of arguments the value expects.  Any value greater than or
+=head2 n_values
+
+Number of values the option expects.  Any value greater than or
 equal to 0 is valid with 0 being the default.
 
-=head3 multiple
+=head2 multiple
 
-If this exists, it means the argument may be encountered multiple times.
+If this exists, it means the option may be encountered multiple times.
 For example --
 
- 		'-a' => {
- 			n_values => 3,
- 			multiple => 1,
- 		 },
+        '-a' => {
+            n_values => 3,
+            multiple => 1,
+         },
 
-says that if '-a' is encountered on the command line, the next
+says that if C<-a> is encountered on the command line, the next
 three arguments on the command line are associated with it and
 that it may be encountered multiple times.
 
-=head3 callback
+
+=head2 mult_values
+
+Use this if you know that the option expects multiple values, but
+you don't know how many till the user executes the script.  This tag
+is only valid for long options.  Everything between the option and 
+a '-' is considered a value.  For example, suppose you wanted to pass
+in a group of user names, your command line might look like:
+ --users fred joe mary gandalf frodo -
+
+=head2 callback
 
 This must be a code reference.  If the template entry looked like:
 
-   		'-a' => {
-   			n_values => 1,
-  			multiple => 1,
-  			callback => \&xyz,
-  		},
+        '-a' => {
+            n_values => 1,
+            multiple => 1,
+            callback => \&xyz,
+        },
 
 then we would call the function xyz with the a Getopt::OO handle
 and the option found and the argument reference.  For instance
 if the function looked like:
 
  sub Callback {
- 	my ($handle, $option) = @_
- 	...
+    my ($handle, $option) = @_
+    ...
 
 the caller could get help with $handle->Help() or its values with
-$handle->Values($option).  He could also manipulate the argument
-list.
+$handle->Values($option).
 
 Note that the only option information available at this point is
 what has been found on the command line up to this point.  For
-example, if the callback were associated with the -f option and
-the command line looked like '-xvfz 1 2 3', and the v and f options
-both expected one additional value, the argument list would have
-only the '3' left and $handle->Values($option) would return 2.
+example, if the callback were associated with the C<-f> option and
+the command line looked like C<-xvfz 1 2 3>, we haven't yet parsed 
+the C<-z> option, so no information associated with this option
+is available.
 
-If the callback returns a non-0 defined value, it failed.  We
+If the callback returns a non-0 value, it failed.  We
 execute 'die $string' where $string is the returned value.
 
-=head2 Template non-dashed arguments
 
-Only four  non-dashed  keys are allowed: 'usage', 'other_args',
+=head1 Template non-dashed arguments
+
+Only four  non-dashed  keys are allowed: 'usage', 'other_values',
 'required', and 'mutual_exclusive'.
 
-=head3 usage
+=head2 usage
 
 This is a string.  Typically it wil be the first part of a
 help statement and combined with the 'help' arguments for
@@ -176,7 +221,9 @@ usage message.  By default, we will create a usage string that
 is the base name of the executable ($0) and just the string
 '[options]'.
 
-=head3 other_args
+
+=head2 other_values
+
 
 Usually all the argments on a command line aren't associated
 with options.  For instance, a function may always require
@@ -185,15 +232,18 @@ signature might look like
 
  script [-v] input_file
 
-To add this to the first line of the usage statement, we would
-set ' other_args => 'input_file'.
+To insure that you have the correct number of arguments after
+parsing the options, set 'other_values => n' where n is the number
+of additional arguments expected.  This is an optional argument.
 
-=head3 required
+
+=head2 required
+
 
 This is an array reference to required arguments.  It is an error
 if none of these are found on the command line.
 
-=head3 mutual_exclusive
+=head2 mutual_exclusive
 
 This is an list  reference.  It says "it is an error to receive
 these arguments at the same time."   For example, "tar cx" would not
@@ -225,13 +275,15 @@ As stated above, this would also be correct.
             help => 'Create a tar file',
         }
 
-=head2 Methods associated with the OO module:
+=head1 Methods associated with the OO module:
 
-=head3 my $handle = Getopt::OO->new(\@ARGV, %Template)
+=head2 my $handle = Getopt::OO->new(\@ARGV, %Template)
 
 Creator function.  Expects a reference to the argument list and
-a template that explanes how to parse the input arguments.   Returns
-an object reference.  If you want to catch any possible errors, do
+a template that explanes how to parse the input arguments and returns
+an object reference.  If you want to catch parse errors
+rather than having the parser print an error message and 
+exit, do this:
 
  my $handle = eval {Getopt::OO>new(\@ARGV, %template)};
  if ($@) {...
@@ -239,10 +291,11 @@ an object reference.  If you want to catch any possible errors, do
 $@ will contain your error string if one exists and be empty 
 otherwise.
 
-=head3 $handle->Values(argument);
+=head2 $handle->Values(argument);
 
-Values() returns the number of command line options that
-were matched.  
+Values() returns a list of command line options that
+were matched in the order they were found.  In scalar
+context, this is the number of matches.  
 
 Values($option) depends on the 'n_values' and the 'multiple'
 for the option in the template.  If the option had no 
@@ -271,11 +324,11 @@ and the following to create our GetOpt handle:
  use Getopt::OO qw(Debug);
  my @argv = qw (-abcde b c0 d0 d1 e0 e1 -c c1 -e e2 es);
  my $h = Getopt::OO->new(\@argv,
- 	'-a' => {},
- 	'-b' => { n_values => 1, },
- 	'-c' => { n_values => 1, multiple => 1, },
- 	'-d' => { n_values => 2, },
- 	'-e' => { n_values => 2, multiple => 1, },
+    '-a' => {},
+    '-b' => { n_values => 1, },
+    '-c' => { n_values => 1, multiple => 1, },
+    '-d' => { n_values => 2, },
+    '-e' => { n_values => 2, multiple => 1, },
  );
  my $n_options = $h->Values();
  my $a = $h->Values('-a');
@@ -286,7 +339,7 @@ and the following to create our GetOpt handle:
 
  Example 1.  ValuesDemo.pl
 
-=head3 my $help_string = $handle->Help();
+=head2 my $help_string = $handle->Help();
 
 Get the string string we built for this template.  Note
 that this can be used to check the template to make sure
@@ -295,7 +348,7 @@ arguments separated from non optional, indicates required
 and mutually exclusive options and indicates which options
 expect values and how many values.
 
-=head3 my $client_data = $handle->ClientData($option);
+=head2 my $client_data = $handle->ClientData($option);
 
 The ClientData method is supplied to allow data to be 
 associated with an option.  The data must be scalar or
@@ -311,7 +364,7 @@ To get the data:
 
  $x = $h->ClientData($option);
 
-=head2 Debug and Verbose Functions
+=head1 Debug and Verbose Functions
 
 We also supply two functions the user can export.  These are the
 Debug and the Verbose functions.  If the functions are exported
@@ -328,7 +381,7 @@ to an IO::File object, we will attempt to send all further output
 to this handle.  Note that the object must be enabled before
 any output will occur though.
 
-=head2 EXPORT
+=head1 EXPORT
 
 None by default.
 
@@ -340,7 +393,7 @@ the directory 'Demo'.
 
 =head1 AUTHOR
 
-Steven Smith, E<lt>sjs@chaos-tools.com<gt>
+Steven Smith, E<lt>sjs@chaos-tools.comE<gt>
 
 =head1 COPYRIGHT AND LICENSE
 
@@ -351,6 +404,7 @@ it under the same terms as Perl itself, either Perl version 5.8.3 or,
 at your option, any later version of Perl 5 you may have available.
 
 =cut
+
 {
 	# Debug and Verbose are functions used to enable
 	# and disable debug output.
@@ -434,6 +488,9 @@ sub build_help {
 					$options[-1] .= " ${o}_arg" . (($i) ? ${i} : '');
 				}
 			}
+			if ($template->{$option}{'multi_value'}) {
+				$options[-1] .= ' ... -'
+			}
 		}
 		(@options)
 			? return(join(' ', @options))
@@ -462,12 +519,15 @@ sub build_help {
 		$template,
 		grep(/^--/ && $required{$_}, keys %$template),
 	);
-	my $other_args = $template->{'other_args'} || '';
+	my $other_values = ($template->{'other_values'})
+		? ' arg' x $template->{'other_values'}
+		: '';
 	my $usage = join ('', "USAGE: $name ",
-		($short_optional_arg_list) ? "[ $short_optional_arg_list ] " : '',
-		($long_optional_arg_list) ?	"[ $long_optional_arg_list ] " : '',
-			$short_required_arg_list && ' ', $long_required_arg_list && ' ',
-			$other_args,
+		($short_optional_arg_list)	? " [$short_optional_arg_list]" : '',
+		($long_optional_arg_list)	? " [$long_optional_arg_list]" : '',
+		($short_required_arg_list)	? " $short_required_arg_list" : '',
+		($long_required_arg_list)	? " $long_required_arg_list" : '',
+		$other_values,
 	) . "\n";
 	# the template usage may be either a scalar or a list ref.
 	# in either case, indent by 4 spaces and terminate with a 
@@ -518,12 +578,15 @@ sub build_help {
 				$max_len = length $options if (length $options > $max_len);
 			}
 		}
+		elsif ($template->{$_}{'multi_value'}) {
+			$options .= ' ... -';
+		}
 		$options_list{$_} = $options;
 	} sort grep ref $template->{$_} eq 'HASH'
 			&& /^-+/
 			&& exists $template->{$_}{'help'}
 			, keys %$template;
-	$max_len = ((int($max_len) / 4) + 1) * 4;
+	$max_len = (int($max_len / 4) + 1) * 4;
 	# output is set so that the arg_list is put out the
 	# first time only and all the actual help is justified 
 	# to the right of the argument list.
@@ -553,6 +616,17 @@ sub parse_template {
 	my @errors;
 	my %defined;
 	# First do the non-dashed options.
+	my %valid = map {$_,1} qw(multiple other_values usage multi_value);
+	if (my @bad = grep !/^-/ && !$valid{$_}, keys %$template) {
+		if (my @bad) {
+			push @errors, "Unrecognized tags: @bad\n";
+		}
+	}
+	if (defined $template->{'other_values'}
+				&& $template->{'other_values'} !~ /^\d+/) {
+		push @errors, "other_values is \""
+			. $template->{'other_values'} . "\" and must be a number.\n";
+	}
 
 	foreach my $option (sort grep !/^-+/,  keys %$template) {
 		my $ref = $template->{$option};
@@ -577,31 +651,36 @@ sub parse_template {
 				last;
 		}
 		my $ref = $template->{$option};
-		foreach my $key (sort keys %$ref) {
-			if ($defined{$key}) {
-				push @errors, "$key defined multiple times.\n";
-			}
-			elsif ($key eq 'callback'
-					|| $key eq 'help'
-					|| $key eq 'multiple') {
-				# already took care of this.  Just skip
-			}
-			elsif ($key eq 'n_values') {
-				if ($ref->{'n_values'} !~ /^\d+$/) {
-					push @errors,
-						"$key: n_values is $ref->{'n_values'} and should be an ",
-						"integer\n";
+		my @bad = grep !/^(help|n_values|multiple|multi_value|callback)$/
+			, keys %$ref;
+		if (@bad) {
+				push @errors, "$option: \"@bad\" are not recognized "
+					. "options.\n";
+		}
+		else {
+			foreach my $key (sort keys %$ref) {
+				if ($key eq 'n_values') {
+					if ($ref->{'n_values'} !~ /^\d+$/) {
+						push @errors,
+							"$key: n_values is $ref->{'n_values'} and should be an ",
+							"integer\n";
+					}
 				}
-			}
-			elsif ($key =~ /^-{1,2}[^-]/) {
 				# Make sure keys for template entry are valid.
-				my @bad = grep /^(help|n_values|multiple)$/, %$ref;
-				push @errors, "$key has invalid keys: @bad\n";
+				if ($ref->{'multi_value'}) {
+					if ($option =~ /^--/) {
+						if (my @b = grep /^(n_values)$/, keys %$ref) {
+							push @errors, "$key is multi value.  \"@b\" are not "
+								. "valid for this option.";
+						}
+					}
+					else {
+						push @errors, "$option is a short option.  multi_value is "
+							. "only valid for long options.\n";
+					}
+				}
+				last if @errors;
 			}
-			else {
-				push @errors, "Unrecognized option: $key\n";
-			}
-			last if @errors;
 		}
 		%{$this->{$option}} = %{$template->{$option}} unless @errors;
 	}
@@ -609,8 +688,8 @@ sub parse_template {
 }
 sub parse_options {
 	my ($this, $argv, $template) = @_;
-	my @errors = ();
-	$this->{errors} = \@errors;
+	my @errors = (); $this->{errors} = \@errors;
+	my @options_found = (); $this->{options} = \@options_found;
 	while (@$argv && $argv->[0] =~ /^-/ && !@errors) {
 		# If the option starts with a single dash, split it into smaller
 		# one character args preceeded by a dash.
@@ -623,6 +702,7 @@ sub parse_options {
 		shift @$argv;
 		while (defined (my $option = shift @options)) {
 			if ($template->{$option}) {
+				push @options_found, $option;
 				my $ref = $template->{$option};
 				# If this option has already been encountered and multiple
 				# isn't set, we have an error.
@@ -668,6 +748,28 @@ sub parse_options {
 							: push @errors, "Insufficent values for $option\n";
 					}
 				}
+				elsif ($this->{$option}{'multi_value'}) {
+					my @o;
+					while (@$argv && $argv->[0] !~ /^-/) {
+						push @o, shift @$argv;
+					}
+					if(@$argv) {
+						shift @$argv if $argv->[0] eq '-';
+						if ($this->{$option}{'multiple'}) {
+							unless (exists $this->{$option}{'values'}) {
+								$this->{$option}{'values'} = [];
+							}
+							push @{$this->{$option}{'values'}}, \@o;
+						}
+						else {
+							@{$this->{$option}{'values'}} = @o;
+						}
+					}
+					else {
+						push @errors, "Failed to find end to "
+							. "multi_value option $option.\n";
+					}
+				}
 				# n_values isn't set.  Just push 1 on the values stack
 				# for this guy.
 				else {
@@ -686,6 +788,10 @@ sub parse_options {
 			$this->{$option}{'exists'}++;
 		}
 		last if @errors;
+	}
+	if ($template->{'other_values'} && $template->{'other_values'} != @$argv) {
+		push @errors, "Expected $template->{other_values} after parsing "
+			. "options and had ", scalar @$argv, "\n";
 	}
 }
 
@@ -801,20 +907,24 @@ sub Values {
 	if ($key) {
 		if (exists $this->{$key}) {
 			my $ref = $this->{$key};
-			($ref->{'n_values'})
-				? ($ref->{'multiple'})
-					? return(@{$ref->{'values'}})
-					: ($ref->{'n_values'} == 1)
-						? return($ref->{'values'})
-						: return(@{$ref->{'values'}})
-				: return($ref->{'values'} || 0)
+			($ref->{'multi_value'})
+				? ($ref->{'values'})
+					? return @{$ref->{'values'}}
+					: return
+				: ($ref->{'n_values'})
+					? ($ref->{'multiple'})
+						? return(@{$ref->{'values'}})
+						: ($ref->{'n_values'} == 1)
+							? return($ref->{'values'})
+							: return(@{$ref->{'values'}})
+					: return($ref->{'values'} || 0)
 		}
 		else {
 			die "Values called on undefined option.\n";
 		}
 	}
 	else {
-		return(scalar grep /^-/ && $this->{$_}{'exists'}, keys %$this);
+		return(@{$this->{options}});
 	}
 }
 
