@@ -1,4 +1,15 @@
 # $Log: Getopt-OO.t,v $
+# Revision 1.13  2005/02/05 17:19:31  sjs
+# added tests for other_values changes.
+#
+# Revision 1.12  2005/02/04 02:56:21  sjs
+# change the way we test for no Values from being == 0 to
+# !Values().
+#
+# Revision 1.11  2005/02/03 03:42:05  sjs
+# Added a test case to check for empty other_values with no
+# required value.
+#
 # Revision 1.10  2005/01/31 04:05:50  sjs
 # Fixed a warning on $m8 variable.
 #
@@ -78,7 +89,7 @@ my $help = 'USAGE: Getopt-OO.t [-ab ]
 			"Value looks wrong for 1 boolean found"
 		);
 		OK(
-			$h->Values('-b') == 0, 	"Value looks wrong for 1 boolean not found"
+			!$h->Values('-b'), 	"Value looks wrong for 1 boolean not found"
 		);
 	}
 }
@@ -111,7 +122,7 @@ Options "-a" declared more than once.
 		);
 	};
 	OK(!$@,  "Crashed");
-	OK($h->Values() == 0, "Empty failed");
+	OK(!$h->Values(), "Empty failed");
 	my @argv = qw (-a --a -b);
 	my @test = @argv;
 	eval {
@@ -349,7 +360,7 @@ Option callback for "-a" returned an error:
 {
 	my $m1 = "USAGE: Getopt-OO.t value_1 ... value_n
 Found following errors:
-other_values: Can't have n_values and multi_value
+other_values: Can't have multi_value
 ";
 	eval {
 		my $handle = Getopt::OO->new(
@@ -359,7 +370,7 @@ other_values: Can't have n_values and multi_value
 	};
 	OK(
 		$@ eq $m1,
-		"other_value check for multi_value and n_value both set.\n$@"
+		"other_value check for multi_value.\n$@"
 	);
 	my $m2 = 'USAGE: Getopt-OO.t
 Found following errors:
@@ -458,19 +469,6 @@ other_values: should be reference to a hash.
 		@r1 == 3 && join(' ', @r1) eq 'x y z',
 		'Check return on other_values callback'
 	);
-	my $m8 = 'USAGE: Getopt-OO.t value_1 ... value_n
-';
-	eval {
-		$handle = Getopt::OO->new(
-			[ 'x', 'y', 'z' ],
-			other_values => { multi_value => 1 },
-		);
-	};
-	OK(
-		!$@ && $handle && $handle->Help() eq $m8,
-		"Check help for other_value multi_value\n$@:"
-			. (($handle) ? $handle->Help() : ''),
-	);
 	my $m9 = 'USAGE: Getopt-OO.t file_1 ... file_n
 ';
 	eval {
@@ -484,7 +482,7 @@ other_values: should be reference to a hash.
 		"Check help for other_value help\n$@:"
 			. (($handle) ? $handle->Help() : ''),
 	);
-	$m8 = 'USAGE: Getopt-OO.t value_1 ... value_3
+	my $m8 = 'USAGE: Getopt-OO.t value_1 ... value_3
 Found following errors:
 other_values callback returned an error:
 	Fail callback
@@ -578,15 +576,34 @@ other_values callback returned an error:
 	my $h;
 	eval {
 		$h = Getopt::OO->new(
-			[qw(-a abc)],
-			'-a' => { 'n_values' => 1, },
+			[],
 			'other_values' => { n_values => 1},
 		);
 	};
 	OK(
-		$@ && $@ =~ /Expected 1/,
-		"Failed to catch wrong other_values\n"
+		!$@, "No required values check for other_values:n_values\n"
 	);
+	eval {
+		$h = Getopt::OO->new(
+			[],
+			'required_values' => [ 'other_values' ],
+		);
+	};
+	OK($@, "Check for bad tag name\n");
+	eval {
+		$h = Getopt::OO->new(
+			[],
+			'required' => [ 'other_values' ],
+		);
+	};
+	OK($@, "required values check for other_values:value is bad\n");
+	eval {
+		$h = Getopt::OO->new(
+			['abc'],
+			'required' => [ 'other_values' ],
+		);
+	};
+	OK(!$@, "required values check for other_values:value is good\n");
 	my @argv = qw(-a abc def);
 	eval {
 		$h = Getopt::OO->new(
@@ -596,5 +613,90 @@ other_values callback returned an error:
 		);
 	};
 	OK(@argv == 1 && $argv[0] eq 'def', "argv not right.");
+	my @x;
+	eval {
+		$h = Getopt::OO->new(
+			[qw (a b)],
+			'other_values' => {
+				'n_values' => 1,
+			},
+		);
+	};
+	OK($@, "check for number values on other_values:1");
+	eval {
+		$h = Getopt::OO->new(
+			[qw (a b)],
+			'other_values' => {
+				'n_values' => 2,
+			},
+		);
+	};
+	OK(!$@, "check for number values on other_values:2");
+	eval {
+		$h = Getopt::OO->new(
+			[qw (a b)],
+			'other_values' => {
+				'n_values' => 3,
+			},
+		);
+	};
+	OK($@, "check for number values on other_values:3");
+	eval {
+		$h = Getopt::OO->new(
+			[],
+			'other_values' => {
+				help => 'help',
+				callback => sub {
+					@x = $_[0]->Values($_[1]);
+					0;
+				},
+			},
+		);
+	};
+	OK(
+		!$@ && @x == 0,
+		"check for no values returned on other_values callback"
+	);
+	eval {
+		my @args = qw(a b c);
+		my @a = @args;
+		$h = Getopt::OO->new(
+			\@args,
+		);
+		unless (@args && "@args" eq "@a") {
+			die "Failed to leave args alone if assigned to other values"
+		}
+		if (my @x = $h->Values()) {
+			unless (@x == 1 && $x[0] eq 'other_values') {
+				die "Failed to find 'other_values'.\n";
+			}
+			my @values = $h->Values('other_values');
+			unless (@values && "@values" eq "@a") {
+				die "Failed to get correct return values from ",
+					"Values('other_values')\n";
+			}
+		}
+		else {
+			die "Failed to set the Values for values found.\n"
+		}
+	};
+	OK(!$@, $@);
+	{
+		my $s =  "USAGE: Getopt-OO.t\n"
+				. "Found following errors:\n"
+				. "other_values n_values set to 0 but received 3 values.\n";
+		eval {
+			my @args = qw(a b c);
+			$h = Getopt::OO->new(
+				\@args,
+				'other_values' => {
+					'n_values' => 0,
+				}
+			);
+		};
+		OK($@ && $@ eq $s, "Failed to detect other_values received but "
+			. "other_values n_values set to 0.\n"
+		);
+	}
 }
 # Tests for other_values.

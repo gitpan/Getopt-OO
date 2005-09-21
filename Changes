@@ -52,5 +52,28 @@ Revision history for Perl extension Getopt::OO.
     - Modified error message for callback so that name of option 
       generating error is displayed.
     - This should be it for feature modifications.
+0.06 Sat Feb  5 09:21:59 PST 2005
+    - Changes involving out other_values works.  It now uses the 
+      required field and behaves in other ways as the rest of the 
+      options parsing works.  Added several tests to make sure
+      things were working correctly.  other_values now accepts
+      both the n_values and multi_value and also works with 
+      callback and client data, but it doesn't accept the 
+      multiple argument.  It also can be added to the required
+      field.
+0.7 Tue Sep 20 19:40:26 PDT 2005
+	- Changed the -multiple_values to be -multiple.  Name
+	  seemed more suitable and hopefully won't affect too
+	  many people.
+	- Fix problem with the Debug and Verbose not detecting 
+	  printf format statement correctly.
+	- fixed minor bug with not catching invalid parameters correctly.
+	- changed some error handling so error messages are more explicit.
+	* Most significant change is in how the 'other_values' parameter
+	  is handled.  We now place any unparsed values in the other_values
+	  so it becomes easier to detect problems with the user's 
+	  command line input.  Also allow setting n_values parameter of
+	  other_values to 0 so you can disallow any unparsed values
+	  if desired.
 
 
